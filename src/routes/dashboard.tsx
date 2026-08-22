@@ -3,6 +3,7 @@ import type { Env } from "../lib/context";
 import { Layout } from "../components/layout";
 import { BarChart, Link2, Upload } from "../components/icons";
 import { formatMs } from "../lib/format";
+import { siteUrl } from "../lib/urls";
 
 export const dashboard = new Hono<Env>();
 
@@ -70,7 +71,7 @@ dashboard.get("/dashboard", async (c) => {
                 <div class="min-w-0 flex-1">
                   <a href={`/l/${row.slug}/stats`} class="font-medium hover:underline">{row.title}</a>
                   <p class="mt-0.5 truncate font-mono text-xs text-muted-foreground">
-                    {new URL(`/${row.slug}`, c.env.SITE_URL).host}/{row.slug}
+                    {new URL(`/${row.slug}`, siteUrl(c)).host}/{row.slug}
                     {row.expires_at && (
                       <span class="ml-2 rounded bg-muted px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground">
                         expires {new Date(row.expires_at).toLocaleDateString()}

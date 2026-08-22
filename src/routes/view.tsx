@@ -5,6 +5,7 @@ import type { Env } from "../lib/context";
 import { Layout } from "../components/layout";
 import { Download, FileText } from "../components/icons";
 import { loadLink } from "./api";
+import { siteUrl } from "../lib/urls";
 
 export const view = new Hono<Env>();
 
@@ -14,7 +15,7 @@ view.get("/:slug/qr.svg", async (c) => {
   const link = await loadLink(c.env.DB, slug);
   if (!link) return c.notFound();
 
-  const svg = renderSVG(new URL(`/${slug}`, c.env.SITE_URL).toString(), {
+  const svg = renderSVG(new URL(`/${slug}`, siteUrl(c)).toString(), {
     border: 1,
     pixelSize: 8,
   });

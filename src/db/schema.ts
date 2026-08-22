@@ -63,7 +63,8 @@ export type Bindings = {
   DB: D1Database;
   FILES: R2Bucket;
   ASSETS: Fetcher;
-  SITE_URL: string;
+  /** Optional override; the request's own origin is used when unset. */
+  SITE_URL?: string;
   /** Set with `wrangler secret put RESEND_API_KEY`. Absent locally: mail is logged. */
   RESEND_API_KEY?: string;
   MAIL_FROM?: string;

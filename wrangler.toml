@@ -23,7 +23,10 @@ database_name = "pdfsy"
 database_id = "PLACEHOLDER_RUN_WRANGLER_D1_CREATE"
 
 [vars]
-SITE_URL = "https://pdf.sy"
+# SITE_URL is optional: every link is built from the origin the request came in
+# on, so the same build works on *.workers.dev and on pdf.sy with no change.
+# Set it only if the canonical domain must differ from the serving host.
+# SITE_URL = "https://pdf.sy"
 # Anonymous links self-destruct. This is the abuse ceiling and the signup pitch.
 ANON_LINK_TTL_DAYS = "7"
 MAX_UPLOAD_MB = "25"

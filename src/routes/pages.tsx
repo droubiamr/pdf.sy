@@ -4,6 +4,7 @@ import type { Env } from "../lib/context";
 import { Layout } from "../components/layout";
 import { BarChart, Copy, Link2, Merge, QrCode, RotateCw, Scissors, Shrink, Upload } from "../components/icons";
 import { formatMs } from "../lib/format";
+import { siteUrl } from "../lib/urls";
 
 export const pages = new Hono<Env>();
 
@@ -320,7 +321,7 @@ pages.get("/l/:slug/stats", async (c) => {
           ← {user ? "All your links" : "Share another"}
         </a>
         <h1 class="mt-3 text-2xl font-semibold tracking-tight">{row.title}</h1>
-        <p class="mt-1 font-mono text-sm text-muted-foreground">{new URL(`/${slug}`, c.env.SITE_URL).toString()}</p>
+        <p class="mt-1 font-mono text-sm text-muted-foreground">{new URL(`/${slug}`, siteUrl(c)).toString()}</p>
 
         <div class="mt-8 grid gap-3 sm:grid-cols-3">
           <Stat label="Views" value={String(views)} />

@@ -34,13 +34,30 @@ npm run dev
 
 Then open http://localhost:8787.
 
-## Before the first deploy
+## Going live
 
-1. `npx wrangler r2 bucket create pdfsy-files`
-2. `npx wrangler d1 create pdfsy` — paste the returned id into `wrangler.toml`
-3. `npm run db:remote` to apply the schema
-4. `npx wrangler secret put RESEND_API_KEY` so email actually sends
-5. `npm run deploy`
+```bash
+npx wrangler login       # once, opens your browser
+npm run setup:cloud      # bucket, database, migrations, deploy
+```
+
+`setup:cloud` is idempotent — it creates the R2 bucket and D1 database only if
+they are missing, writes the `database_id` into `wrangler.toml`, applies any
+unapplied migrations, builds, and deploys. Re-run it after any migration.
+
+Then, when you want email to actually send rather than land in the Worker log:
+
+```bash
+npx wrangler secret put RESEND_API_KEY
+```
+
+### Hostnames
+
+There is no hostname in the configuration. Share links, QR codes and sign-in
+links are all built from the origin the request arrived on, so the same build
+works on `*.workers.dev` today and on `pdf.sy` the moment you point the domain
+at it. `SITE_URL` exists only as an override for the case where the canonical
+domain must differ from the serving host.
 
 ## Layout
 

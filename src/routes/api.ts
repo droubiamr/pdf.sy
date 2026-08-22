@@ -4,6 +4,7 @@ import type { Env } from "../lib/context";
 import { newId, newManageToken, newSlug, sha256Hex, hashIp, RESERVED_SLUGS } from "../lib/ids";
 import { send, openNotificationEmail } from "../lib/mail";
 import { formatMs } from "../lib/format";
+import { siteUrl } from "../lib/urls";
 import type { Bindings } from "../db/schema";
 
 export const api = new Hono<Env>();
@@ -81,8 +82,8 @@ api.post("/documents", async (c) => {
     slug,
     manageToken,
     title,
-    url: new URL(`/${slug}`, c.env.SITE_URL).toString(),
-    statsUrl: new URL(`/l/${slug}/stats?t=${manageToken}`, c.env.SITE_URL).toString(),
+    url: new URL(`/${slug}`, siteUrl(c)).toString(),
+    statsUrl: new URL(`/l/${slug}/stats?t=${manageToken}`, siteUrl(c)).toString(),
     expiresAt,
   });
 });
@@ -161,7 +162,9 @@ api.post("/v/:slug/ping", async (c) => {
   await c.env.DB.batch(statements);
 
   // The reader is waiting on this response; the email is not their problem.
-  c.executionCtx.waitUntil(maybeNotifyOwner(c.env, slug, body.sessionId));
+  // The origin is captured here: the notification runs after the response,
+  // where there is no longer a request to read it from.
+  c.executionCtx.waitUntil(maybeNotifyOwner(c.env, siteUrl(c), slug, body.sessionId));
 
   return c.body(null, 204);
 });
@@ -173,7 +176,7 @@ const NOTIFY_AFTER_MS = 5000;
  * One email per view session, sent the first time a visitor stays long enough
  * to count as having actually read something.
  */
-async function maybeNotifyOwner(env: Bindings, slug: string, sessionId: string): Promise<void> {
+async function maybeNotifyOwner(env: Bindings, origin: string, slug: string, sessionId: string): Promise<void> {
   const row = await env.DB.prepare(
     `SELECT vs.total_ms, vs.max_page, vs.country, vs.viewer_email, vs.notified_at,
             d.title, u.email AS owner_email, l.notify_on_view,
@@ -211,7 +214,7 @@ async function maybeNotifyOwner(env: Bindings, slug: string, sessionId: string):
     to: row.owner_email,
     ...openNotificationEmail({
       title: row.title,
-      statsUrl: new URL(`/l/${slug}/stats`, env.SITE_URL).toString(),
+      statsUrl: new URL(`/l/${slug}/stats`, origin).toString(),
       country: row.country,
       durationLabel: formatMs(row.total_ms),
       lastPage: row.max_page || 1,

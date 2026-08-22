@@ -5,6 +5,7 @@ import {
   createMagicLink, consumeMagicLink, findOrCreateUser, startSession, endSession, normalizeEmail,
 } from "../lib/auth";
 import { send, magicLinkEmail } from "../lib/mail";
+import { siteUrl } from "../lib/urls";
 
 export const auth = new Hono<Env>();
 
@@ -60,7 +61,7 @@ auth.post("/api/auth/magic-link", async (c) => {
   if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     const token = await createMagicLink(c.env.DB, email);
     if (token) {
-      const url = new URL(`/auth/verify?token=${encodeURIComponent(token)}`, c.env.SITE_URL).toString();
+      const url = new URL(`/auth/verify?token=${encodeURIComponent(token)}`, siteUrl(c)).toString();
       c.executionCtx.waitUntil(send(c.env, { to: email, ...magicLinkEmail(url) }));
     }
   }

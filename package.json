@@ -8,7 +8,8 @@
     "deploy": "npm run build && wrangler deploy",
     "db:local": "node scripts/migrate.mjs",
     "db:remote": "node scripts/migrate.mjs --remote",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p src/client"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p src/client",
+    "setup:cloud": "node scripts/setup-cloud.mjs"
   },
   "dependencies": {
     "hono": "^4.13.3",
