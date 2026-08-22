@@ -64,6 +64,9 @@ export type Bindings = {
   FILES: R2Bucket;
   ASSETS: Fetcher;
   SITE_URL: string;
+  /** Set with `wrangler secret put RESEND_API_KEY`. Absent locally: mail is logged. */
+  RESEND_API_KEY?: string;
+  MAIL_FROM?: string;
   ANON_LINK_TTL_DAYS: string;
   MAX_UPLOAD_MB: string;
 };

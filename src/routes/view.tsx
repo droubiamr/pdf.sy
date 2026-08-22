@@ -1,11 +1,12 @@
 import { Hono } from "hono";
 import { renderSVG } from "uqr";
-import type { Bindings, DocumentVersion } from "../db/schema";
+import type { DocumentVersion } from "../db/schema";
+import type { Env } from "../lib/context";
 import { Layout } from "../components/layout";
 import { Download, FileText } from "../components/icons";
 import { loadLink } from "./api";
 
-export const view = new Hono<{ Bindings: Bindings }>();
+export const view = new Hono<Env>();
 
 /** QR for a link. Generated on the fly — there is nothing to store. */
 view.get("/:slug/qr.svg", async (c) => {
@@ -59,7 +60,7 @@ view.get("/:slug", async (c) => {
 
   if (!link) {
     return c.html(
-      <Layout title="Link unavailable — pdf.sy">
+      <Layout title="Link unavailable — pdf.sy" user={c.get("user")}>
         <section class="mx-auto w-full max-w-lg px-5 py-24 text-center">
           <h1 class="text-2xl font-semibold tracking-tight">This link is no longer available</h1>
           <p class="mt-2 text-muted-foreground">

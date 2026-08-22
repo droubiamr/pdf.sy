@@ -28,6 +28,7 @@ await esbuild.build({
     upload: "src/client/upload.ts",
     viewer: "src/client/viewer.ts",
     tools: "src/client/tools.ts",
+    dashboard: "src/client/dashboard.ts",
   },
   outdir: "public/assets",
   bundle: true,
@@ -45,4 +46,4 @@ for (const file of ["pdf.min.mjs", "pdf.worker.min.mjs"]) {
   await cp(resolve(pdfjs, file), resolve(out, "vendor/pdfjs", file));
 }
 
-console.log("built: public/assets/{app.css,upload.js,viewer.js,tools.js} + vendor/pdfjs");
+console.log("built: public/assets (css + client bundles) and vendor/pdfjs");

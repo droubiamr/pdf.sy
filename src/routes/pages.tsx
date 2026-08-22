@@ -1,9 +1,11 @@
 import { Hono } from "hono";
-import type { Bindings, Link, Document, DocumentVersion, ViewSession, PageStat } from "../db/schema";
+import type { Link, Document, ViewSession, PageStat } from "../db/schema";
+import type { Env } from "../lib/context";
 import { Layout } from "../components/layout";
 import { BarChart, Copy, Link2, Merge, QrCode, RotateCw, Scissors, Shrink, Upload } from "../components/icons";
+import { formatMs } from "../lib/format";
 
-export const pages = new Hono<{ Bindings: Bindings }>();
+export const pages = new Hono<Env>();
 
 /* -------------------------------------------------------------------------- */
 /*  Landing                                                                    */
@@ -12,6 +14,7 @@ export const pages = new Hono<{ Bindings: Bindings }>();
 pages.get("/", (c) =>
   c.html(
     <Layout
+      user={c.get("user")}
       title="pdf.sy — send a PDF as a link, see what happens to it"
       description="Upload a PDF, get a short link, and find out who opened it, for how long, and which pages they actually read."
     >
@@ -95,7 +98,7 @@ const ToolCard = ({ href, icon, name, body }: { href: string; icon: unknown; nam
 
 pages.get("/new", (c) =>
   c.html(
-    <Layout title="Share a PDF — pdf.sy" script="/assets/upload.js">
+    <Layout title="Share a PDF — pdf.sy" user={c.get("user")} script="/assets/upload.js">
       <section class="mx-auto w-full max-w-2xl px-5 py-16">
         <h1 class="text-3xl font-semibold tracking-tight">Share a PDF</h1>
         <p class="mt-2 text-muted-foreground">
@@ -172,6 +175,7 @@ pages.get("/new", (c) =>
 pages.get("/tools", (c) =>
   c.html(
     <Layout
+      user={c.get("user")}
       title="Free PDF tools — merge, split, rotate, compress | pdf.sy"
       description="Merge, split, rotate and compress PDFs in your browser. Nothing is uploaded."
       script="/assets/tools.js"
@@ -268,21 +272,28 @@ pages.get("/l/:slug/stats", async (c) => {
   const token = c.req.query("t") ?? "";
 
   const row = await c.env.DB.prepare(
-    `SELECT l.slug, l.created_at, d.title, d.manage_token, d.current_version
+    `SELECT l.slug, l.created_at, d.title, d.manage_token, d.owner_id, d.current_version
        FROM links l JOIN documents d ON d.id = l.document_id
       WHERE l.slug = ?`,
-  ).bind(slug).first<Pick<Link, "slug" | "created_at"> & Pick<Document, "title" | "manage_token" | "current_version">>();
+  ).bind(slug).first<
+    Pick<Link, "slug" | "created_at"> & Pick<Document, "title" | "manage_token" | "owner_id" | "current_version">
+  >();
 
   if (!row) return c.notFound();
-  if (!token || token !== row.manage_token) {
+
+  // Two ways in: the account that owns it, or the token handed out at upload.
+  const user = c.get("user");
+  const isOwner = Boolean(user && row.owner_id === user.id);
+  if (!isOwner && (!token || token !== row.manage_token)) {
     return c.html(
-      <Layout title="Stats — pdf.sy">
+      <Layout title="Stats — pdf.sy" user={user}>
         <section class="mx-auto w-full max-w-lg px-5 py-24 text-center">
           <h1 class="text-2xl font-semibold tracking-tight">This stats page is private</h1>
           <p class="mt-2 text-muted-foreground">
-            Open it from the tab where you created the link. Until accounts arrive,
-            the token in that URL is the only key.
+            Sign in with the account that owns this link, or open it from the tab
+            where you created it.
           </p>
+          <a href="/login" class="btn mt-6">Sign in</a>
         </section>
       </Layout>,
       403,
@@ -303,9 +314,11 @@ pages.get("/l/:slug/stats", async (c) => {
   const peak = Math.max(1, ...stats.results.map((p) => p.total_ms));
 
   return c.html(
-    <Layout title={`${row.title} — stats`}>
+    <Layout title={`${row.title} — stats`} user={user}>
       <section class="mx-auto w-full max-w-3xl px-5 py-12">
-        <a href="/new" class="text-sm text-muted-foreground hover:text-foreground">← Share another</a>
+        <a href={user ? "/dashboard" : "/new"} class="text-sm text-muted-foreground hover:text-foreground">
+          ← {user ? "All your links" : "Share another"}
+        </a>
         <h1 class="mt-3 text-2xl font-semibold tracking-tight">{row.title}</h1>
         <p class="mt-1 font-mono text-sm text-muted-foreground">{new URL(`/${slug}`, c.env.SITE_URL).toString()}</p>
 
@@ -373,11 +386,3 @@ const Stat = ({ label, value }: { label: string; value: string }) => (
   </div>
 );
 
-function formatMs(ms: number): string {
-  if (!ms) return "0s";
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ${s % 60}s`;
-  return `${Math.floor(m / 60)}h ${m % 60}m`;
-}

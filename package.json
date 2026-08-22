@@ -6,8 +6,8 @@
     "build": "node scripts/build.mjs",
     "dev": "npm run build && wrangler dev",
     "deploy": "npm run build && wrangler deploy",
-    "db:local": "wrangler d1 execute pdfsy --local --file=./migrations/0000_init.sql",
-    "db:remote": "wrangler d1 execute pdfsy --remote --file=./migrations/0000_init.sql",
+    "db:local": "node scripts/migrate.mjs",
+    "db:remote": "node scripts/migrate.mjs --remote",
     "typecheck": "tsc --noEmit && tsc --noEmit -p src/client"
   },
   "dependencies": {

@@ -1,8 +1,12 @@
 import { Hono } from "hono";
-import type { Bindings, Link } from "../db/schema";
+import type { Link } from "../db/schema";
+import type { Env } from "../lib/context";
 import { newId, newManageToken, newSlug, sha256Hex, hashIp, RESERVED_SLUGS } from "../lib/ids";
+import { send, openNotificationEmail } from "../lib/mail";
+import { formatMs } from "../lib/format";
+import type { Bindings } from "../db/schema";
 
-export const api = new Hono<{ Bindings: Bindings }>();
+export const api = new Hono<Env>();
 
 /**
  * Phase 1 uploads stream through the Worker, which is simple and fine up to the
@@ -53,14 +57,16 @@ api.post("/documents", async (c) => {
     slug = newSlug();
   }
 
+  // Anonymous uploads expire; an account's do not. That gap is the pitch.
+  const owner = c.get("user");
   const ttlDays = Number(c.env.ANON_LINK_TTL_DAYS ?? 7);
-  const expiresAt = ttlDays > 0 ? now + ttlDays * 86_400_000 : null;
+  const expiresAt = owner || ttlDays <= 0 ? null : now + ttlDays * 86_400_000;
 
   await c.env.DB.batch([
     c.env.DB.prepare(
       `INSERT INTO documents (id, owner_id, title, manage_token, current_version, status, created_at)
-       VALUES (?, NULL, ?, ?, 1, 'ready', ?)`,
-    ).bind(docId, title, manageToken, now),
+       VALUES (?, ?, ?, ?, 1, 'ready', ?)`,
+    ).bind(docId, owner?.id ?? null, title, manageToken, now),
     c.env.DB.prepare(
       `INSERT INTO document_versions (id, document_id, version, r2_key, sha256, size_bytes, page_count, created_at)
        VALUES (?, ?, 1, ?, ?, ?, ?, ?)`,
@@ -153,8 +159,67 @@ api.post("/v/:slug/ping", async (c) => {
   ];
 
   await c.env.DB.batch(statements);
+
+  // The reader is waiting on this response; the email is not their problem.
+  c.executionCtx.waitUntil(maybeNotifyOwner(c.env, slug, body.sessionId));
+
   return c.body(null, 204);
 });
+
+/** Minimum dwell before an open is worth an email, so a bounce stays quiet. */
+const NOTIFY_AFTER_MS = 5000;
+
+/**
+ * One email per view session, sent the first time a visitor stays long enough
+ * to count as having actually read something.
+ */
+async function maybeNotifyOwner(env: Bindings, slug: string, sessionId: string): Promise<void> {
+  const row = await env.DB.prepare(
+    `SELECT vs.total_ms, vs.max_page, vs.country, vs.viewer_email, vs.notified_at,
+            d.title, u.email AS owner_email, l.notify_on_view,
+            (SELECT page_count FROM document_versions
+              WHERE document_id = d.id AND version = vs.version) AS page_count
+       FROM view_sessions vs
+       JOIN links l ON l.slug = vs.slug
+       JOIN documents d ON d.id = l.document_id
+       JOIN users u ON u.id = d.owner_id
+      WHERE vs.id = ? AND vs.slug = ?`,
+  ).bind(sessionId, slug).first<{
+    total_ms: number;
+    max_page: number;
+    country: string | null;
+    viewer_email: string | null;
+    notified_at: number | null;
+    title: string;
+    owner_email: string;
+    notify_on_view: number;
+    page_count: number | null;
+  }>();
+
+  if (!row) return;                                  // anonymous document, or gone
+  if (row.notified_at || !row.notify_on_view) return;
+  if (row.total_ms < NOTIFY_AFTER_MS) return;
+
+  // Claim the notification first: two pings can land at once, and a duplicate
+  // email is far worse than a missed one.
+  const claimed = await env.DB.prepare(
+    `UPDATE view_sessions SET notified_at = ? WHERE id = ? AND notified_at IS NULL`,
+  ).bind(Date.now(), sessionId).run();
+  if (claimed.meta.changes !== 1) return;
+
+  await send(env, {
+    to: row.owner_email,
+    ...openNotificationEmail({
+      title: row.title,
+      statsUrl: new URL(`/l/${slug}/stats`, env.SITE_URL).toString(),
+      country: row.country,
+      durationLabel: formatMs(row.total_ms),
+      lastPage: row.max_page || 1,
+      totalPages: row.page_count,
+      viewerEmail: row.viewer_email,
+    }),
+  });
+}
 
 api.post("/report/:slug", async (c) => {
   type ReportBody = { reason?: string; email?: string };

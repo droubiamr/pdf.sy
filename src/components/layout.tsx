@@ -1,6 +1,8 @@
 import type { Child } from "hono/jsx";
 import { FileText } from "./icons";
 
+type SessionUser = { email: string } | null | undefined;
+
 type Props = {
   title: string;
   description?: string;
@@ -9,9 +11,11 @@ type Props = {
   script?: string;
   /** Viewer pages drop the site chrome so the document owns the screen. */
   bare?: boolean;
+  /** Resolved by middleware; undefined on pages that never look. */
+  user?: SessionUser;
 };
 
-export const Layout = ({ title, description, children, script, bare }: Props) => (
+export const Layout = ({ title, description, children, script, bare, user }: Props) => (
   <html lang="en">
     <head>
       <meta charset="utf-8" />
@@ -37,22 +41,32 @@ export const Layout = ({ title, description, children, script, bare }: Props) =>
       {script && <script type="module" src={script} defer />}
     </head>
     <body class="min-h-dvh flex flex-col">
-      {!bare && <SiteHeader />}
+      {!bare && <SiteHeader user={user} />}
       <main class="flex-1">{children}</main>
       {!bare && <SiteFooter />}
     </body>
   </html>
 );
 
-const SiteHeader = () => (
+const SiteHeader = ({ user }: { user: SessionUser }) => (
   <header class="border-b border-border">
     <div class="mx-auto flex h-16 w-full max-w-5xl items-center gap-6 px-5">
-      <a href="/" class="flex items-center gap-2 font-semibold tracking-tight">
+      <a href={user ? "/dashboard" : "/"} class="flex items-center gap-2 font-semibold tracking-tight">
         <FileText class="size-5 text-primary" />
         pdf.sy
       </a>
       <nav class="ml-auto flex items-center gap-1 text-sm">
         <a href="/tools" class="btn" data-variant="ghost" data-size="sm">Tools</a>
+        {user ? (
+          <>
+            <a href="/dashboard" class="btn" data-variant="ghost" data-size="sm">Your links</a>
+            <form method="post" action="/api/auth/logout">
+              <button type="submit" class="btn" data-variant="ghost" data-size="sm">Sign out</button>
+            </form>
+          </>
+        ) : (
+          <a href="/login" class="btn" data-variant="ghost" data-size="sm">Sign in</a>
+        )}
         <a href="/new" class="btn" data-size="sm">Share a PDF</a>
       </nav>
     </div>

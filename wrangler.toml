@@ -27,3 +27,9 @@ SITE_URL = "https://pdf.sy"
 # Anonymous links self-destruct. This is the abuse ceiling and the signup pitch.
 ANON_LINK_TTL_DAYS = "7"
 MAX_UPLOAD_MB = "25"
+MAIL_FROM = "pdf.sy <hello@pdf.sy>"
+
+# RESEND_API_KEY is a secret, not a var:
+#   npx wrangler secret put RESEND_API_KEY
+# Without it, mail is printed to the console instead of sent, which is exactly
+# what you want locally.
