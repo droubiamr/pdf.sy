@@ -1,0 +1,29 @@
+name = "pdfsy"
+main = "src/index.tsx"
+compatibility_date = "2026-08-22"
+compatibility_flags = ["nodejs_compat"]
+
+# Static assets (CSS, client bundles, vendored pdf.js). The Worker handles
+# everything else. `run_worker_first` is left off: assets win for real files,
+# the Worker gets every dynamic route.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+# The PDFs themselves. R2 has no egress fee, which is the whole reason this
+# business is cheap to run.
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "pdfsy-files"
+
+# Metadata: documents, links, view sessions, page stats.
+[[d1_databases]]
+binding = "DB"
+database_name = "pdfsy"
+database_id = "PLACEHOLDER_RUN_WRANGLER_D1_CREATE"
+
+[vars]
+SITE_URL = "https://pdf.sy"
+# Anonymous links self-destruct. This is the abuse ceiling and the signup pitch.
+ANON_LINK_TTL_DAYS = "7"
+MAX_UPLOAD_MB = "25"

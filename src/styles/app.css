@@ -1,0 +1,89 @@
+@import "tailwindcss";
+@import "basecoat-css";
+
+@source "../**/*.tsx";
+@source "../**/*.ts";
+
+/* ---------------------------------------------------------------------------
+   Untitled UI "Paper" palette, mapped onto Basecoat's shadcn variable names.
+   Every component in the app reads these — change a value here and the whole
+   product changes with it. Never hard-code a colour in a template.
+   --------------------------------------------------------------------------- */
+:root {
+  --radius: 0.5rem;
+
+  --background: #FCFCFD;
+  --foreground: #101828;
+
+  --card: #FFFFFF;
+  --card-foreground: #101828;
+  --popover: #FFFFFF;
+  --popover-foreground: #101828;
+
+  --primary: #47B881;            /* sage green — every primary action */
+  --primary-foreground: #FFFFFF;
+
+  --secondary: #F9FAFB;
+  --secondary-foreground: #344054;
+
+  --muted: #F2F4F7;
+  --muted-foreground: #667085;
+
+  --accent: #ECFDF3;             /* green wash for active/selected states */
+  --accent-foreground: #027A48;
+
+  --destructive: #D92D20;
+  --border: #EAECF0;
+  --input: #D0D5DD;
+  --ring: #47B881;
+
+  --chart-1: #A6F4C5;
+  --chart-2: #6CE9A6;
+  --chart-3: #47B881;
+  --chart-4: #039855;
+  --chart-5: #027A48;
+}
+
+.dark {
+  --background: #0C111D;
+  --foreground: #F5F5F6;
+
+  --card: #161B26;
+  --card-foreground: #F5F5F6;
+  --popover: #161B26;
+  --popover-foreground: #F5F5F6;
+
+  --primary: #47B881;
+  --primary-foreground: #04170D;
+
+  --secondary: #1F242F;
+  --secondary-foreground: #ECECED;
+
+  --muted: #1F242F;
+  --muted-foreground: #94969C;
+
+  --accent: #0D2A1C;
+  --accent-foreground: #75E0A7;
+
+  --destructive: #F97066;
+  --border: #333741;
+  --input: #333741;
+  --ring: #47B881;
+}
+
+@theme inline {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+  /* Anywhere a number is compared against another number, line the digits up. */
+  .tnum { font-variant-numeric: tabular-nums; }
+}

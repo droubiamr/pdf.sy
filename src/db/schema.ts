@@ -1,0 +1,69 @@
+// Type-level mirror of migrations/0000_init.sql. Hand-written rather than
+// generated so there is exactly one source of truth to read.
+
+export type Document = {
+  id: string;
+  owner_id: string | null;
+  title: string;
+  manage_token: string;
+  current_version: number;
+  status: "processing" | "ready" | "blocked";
+  created_at: number;
+  deleted_at: number | null;
+};
+
+export type DocumentVersion = {
+  id: string;
+  document_id: string;
+  version: number;
+  r2_key: string;
+  sha256: string;
+  size_bytes: number;
+  page_count: number | null;
+  created_at: number;
+};
+
+export type Link = {
+  slug: string;
+  document_id: string;
+  pinned_version: number | null;
+  name: string | null;
+  password_hash: string | null;
+  allow_download: number;
+  expires_at: number | null;
+  revoked_at: number | null;
+  created_at: number;
+};
+
+export type ViewSession = {
+  id: string;
+  slug: string;
+  version: number;
+  viewer_email: string | null;
+  country: string | null;
+  ip_hash: string | null;
+  device: string | null;
+  referrer: string | null;
+  started_at: number;
+  last_seen_at: number;
+  total_ms: number;
+  max_page: number;
+  downloaded: number;
+};
+
+export type PageStat = {
+  slug: string;
+  version: number;
+  page: number;
+  views: number;
+  total_ms: number;
+};
+
+export type Bindings = {
+  DB: D1Database;
+  FILES: R2Bucket;
+  ASSETS: Fetcher;
+  SITE_URL: string;
+  ANON_LINK_TTL_DAYS: string;
+  MAX_UPLOAD_MB: string;
+};
