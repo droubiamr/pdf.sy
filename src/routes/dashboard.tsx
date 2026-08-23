@@ -37,7 +37,7 @@ dashboard.get("/dashboard", async (c) => {
   ).bind(user.id).all<Row>();
 
   return c.html(
-    <Layout title="Your links — pdf.sy" user={user} script="/assets/dashboard.js">
+    <Layout title="Your links — pdf.sy" user={user} script="/assets/dashboard.js" noindex>
       <section class="mx-auto w-full max-w-4xl px-5 py-12">
         <div class="flex flex-wrap items-center gap-3">
           <div>

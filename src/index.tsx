@@ -9,6 +9,7 @@ import { auth } from "./routes/auth";
 import { dashboard } from "./routes/dashboard";
 import { links } from "./routes/links";
 import { billing } from "./routes/billing";
+import { legal } from "./routes/legal";
 import { Layout } from "./components/layout";
 
 const app = new Hono<Env>();
@@ -24,6 +25,7 @@ app.route("/", auth);
 app.route("/", dashboard);
 app.route("/", links);
 app.route("/", billing);
+app.route("/", legal);
 app.route("/api", api);
 app.route("/", pages);
 

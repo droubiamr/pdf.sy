@@ -97,6 +97,63 @@ const ToolCard = ({ href, icon, name, body }: { href: string; icon: unknown; nam
 );
 
 /* -------------------------------------------------------------------------- */
+/*  Crawlers                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The marketing and tool pages are the SEO funnel and should be crawled hard.
+ * Everything that renders or serves someone's document must never be, and
+ * `Disallow` is only half of it — a disallowed URL can still be listed from
+ * inbound links alone, which is why those routes also send `noindex`
+ * themselves. This file is the first line, not the only one.
+ */
+pages.get("/robots.txt", (c) =>
+  c.text(
+    [
+      "User-agent: *",
+      "Allow: /$",
+      "Allow: /tools",
+      "Allow: /pricing",
+      "Allow: /privacy",
+      "Allow: /terms",
+      "",
+      "# Someone's document, or the analytics for it. Never index these.",
+      "Disallow: /v/",
+      "Disallow: /l/",
+      "Disallow: /api/",
+      "Disallow: /new",
+      "Disallow: /login",
+      "Disallow: /auth/",
+      "Disallow: /dashboard",
+      "Disallow: /report",
+      "",
+      // Short links live at the root, so the only way to fence them off is to
+      // disallow the root and re-allow each real page above.
+      "Disallow: /",
+      "",
+      `Sitemap: ${new URL("/sitemap.xml", siteUrl(c)).toString()}`,
+      "",
+    ].join("\n"),
+    200,
+    { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=86400" },
+  ),
+);
+
+/** Only the pages that are meant to rank. Links are deliberately absent. */
+pages.get("/sitemap.xml", (c) => {
+  const origin = siteUrl(c);
+  const urls = ["/", "/tools", "/pricing", "/privacy", "/terms"];
+  return c.body(
+    `<?xml version="1.0" encoding="UTF-8"?>\n` +
+      `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+      urls.map((p) => `  <url><loc>${new URL(p, origin).toString()}</loc></url>`).join("\n") +
+      `\n</urlset>\n`,
+    200,
+    { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=86400" },
+  );
+});
+
+/* -------------------------------------------------------------------------- */
 /*  Upload                                                                     */
 /* -------------------------------------------------------------------------- */
 
@@ -281,7 +338,7 @@ pages.get("/l/:slug/stats", async (c) => {
 
   if (!row) {
     return c.html(
-      <Layout title="Stats — pdf.sy" user={user}>
+      <Layout title="Stats — pdf.sy" user={user} noindex>
         <section class="mx-auto w-full max-w-lg px-5 py-24 text-center">
           <h1 class="text-2xl font-semibold tracking-tight">This stats page is private</h1>
           <p class="mt-2 text-muted-foreground">
@@ -309,7 +366,7 @@ pages.get("/l/:slug/stats", async (c) => {
   const peak = Math.max(1, ...stats.results.map((p) => p.total_ms));
 
   return c.html(
-    <Layout title={`${row.name ?? row.title} — stats`} user={user}>
+    <Layout title={`${row.name ?? row.title} — stats`} user={user} noindex>
       <section class="mx-auto w-full max-w-3xl px-5 py-12">
         <a href={user ? "/dashboard" : "/new"} class="text-sm text-muted-foreground hover:text-foreground">
           ← {user ? "All your links" : "Share another"}

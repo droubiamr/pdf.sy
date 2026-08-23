@@ -16,7 +16,7 @@ auth.get("/login", async (c) => {
   const sent = c.req.query("sent") === "1";
 
   return c.html(
-    <Layout title="Sign in — pdf.sy">
+    <Layout title="Sign in — pdf.sy" noindex>
       <section class="mx-auto w-full max-w-md px-5 py-20">
         {sent ? (
           <div class="card rounded-xl border border-border bg-card p-6 text-center">
@@ -75,7 +75,7 @@ auth.get("/auth/verify", async (c) => {
 
   if (!email) {
     return c.html(
-      <Layout title="Link expired — pdf.sy">
+      <Layout title="Link expired — pdf.sy" noindex>
         <section class="mx-auto w-full max-w-md px-5 py-20 text-center">
           <h1 class="text-2xl font-semibold tracking-tight">That link no longer works</h1>
           <p class="mt-2 text-muted-foreground">

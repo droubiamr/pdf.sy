@@ -11,19 +11,28 @@ type Props = {
   script?: string;
   /** Viewer pages drop the site chrome so the document owns the screen. */
   bare?: boolean;
+  /**
+   * Keep the page out of search results. Every page that renders someone's
+   * uploaded document sets this: a shared link is private by intent even
+   * though it is unauthenticated, and a contract turning up in Google would
+   * be the single worst thing this product could do to a customer.
+   */
+  noindex?: boolean;
   /** Resolved by middleware; undefined on pages that never look. */
   user?: SessionUser;
 };
 
-export const Layout = ({ title, description, children, script, bare, user }: Props) => (
+export const Layout = ({ title, description, children, script, bare, noindex, user }: Props) => (
   <html lang="en">
     <head>
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1" />
       <title>{title}</title>
+      {noindex && <meta name="robots" content="noindex, nofollow" />}
       {description && <meta name="description" content={description} />}
       <meta property="og:title" content={title} />
       {description && <meta property="og:description" content={description} />}
+      <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
       <link

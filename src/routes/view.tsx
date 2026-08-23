@@ -108,6 +108,9 @@ view.get("/v/:slug/file", async (c) => {
       "content-disposition": `${download ? "attachment" : "inline"}; filename="${encodeURIComponent(link.name ?? "document")}.pdf"`,
       "cache-control": "private, no-store",
       "x-content-type-options": "nosniff",
+      // A meta tag cannot reach a PDF, and crawlers index PDF bodies happily.
+      // The header is the only way to keep someone's document out of search.
+      "x-robots-tag": "noindex, nofollow, noarchive",
     },
   });
 });
@@ -120,7 +123,7 @@ view.get("/:slug", async (c) => {
 
   if (!context) {
     return c.html(
-      <Layout title="Link unavailable — pdf.sy" user={c.get("user")}>
+      <Layout title="Link unavailable — pdf.sy" user={c.get("user")} noindex>
         <section class="mx-auto w-full max-w-lg px-5 py-24 text-center">
           <h1 class="text-2xl font-semibold tracking-tight">This link is no longer available</h1>
           <p class="mt-2 text-muted-foreground">
@@ -138,7 +141,7 @@ view.get("/:slug", async (c) => {
   if (!(await isUnlocked(c, link))) {
     const wrong = c.req.query("wrong") === "1";
     return c.html(
-      <Layout title={`Password required — pdf.sy`} user={c.get("user")}>
+      <Layout title={`Password required — pdf.sy`} user={c.get("user")} noindex>
         <section class="mx-auto w-full max-w-sm px-5 py-24">
           <div class="card rounded-xl border border-border bg-card p-6">
             <header class="mb-4">
@@ -166,7 +169,7 @@ view.get("/:slug", async (c) => {
   const hideBadge = can({ plan: ownerPlan }, "hide_badge");
 
   return c.html(
-    <Layout title={`${title} — pdf.sy`} script="/assets/viewer.js" bare>
+    <Layout title={`${title} — pdf.sy`} script="/assets/viewer.js" bare noindex>
       <div class="flex min-h-dvh flex-col bg-muted/40" data-slug={slug}>
         <header class="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-border bg-card/90 px-4 backdrop-blur">
           <FileText class="size-4 shrink-0 text-primary" />
