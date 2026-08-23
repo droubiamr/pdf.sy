@@ -77,17 +77,7 @@ const SiteHeader = ({ user }: { user: SessionUser }) => (
 const SiteFooter = () => (
   <footer class="border-t border-border">
     <div class="mx-auto flex w-full max-w-5xl flex-col gap-2 px-5 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center">
-      <p>
-        pdf.sy — send a PDF as a link, and see what happens to it.
-        <br />
-        <a
-          href="https://github.com/droubiamr/pdfsy"
-          class="hover:text-foreground"
-          rel="noopener"
-        >
-          Open source, so it doesn't depend on me.
-        </a>
-      </p>
+      <p>pdf.sy — send a PDF as a link, and see what happens to it.</p>
       <nav class="flex gap-4 sm:ml-auto">
         <a href="/privacy" class="hover:text-foreground">Privacy</a>
         <a href="/terms" class="hover:text-foreground">Terms</a>
