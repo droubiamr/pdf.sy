@@ -13,19 +13,22 @@ const BUCKET = "pdfsy-files";
 const DATABASE = "pdfsy";
 
 // ---------------------------------------------------------------------------
-// THE ONE THING YOU CANNOT CHANGE LATER.
+// Placement. Fixed at creation for both resources, so it is worth a moment.
 //
-// Jurisdiction is fixed when the bucket and database are created. Moving to a
-// different one afterwards means making new resources and copying everything
-// across, so it is worth thirty seconds of thought now.
+// LOCATION is a *hint*, not a restriction: it tells Cloudflare where to put the
+// primary copy, and nothing is fenced in. Workers still run at every edge and
+// R2 reads are still cached globally, so this only affects where writes land.
 //
-// "eu"  — data stays in EU datacenters. GDPR-friendly, and it makes a
-//         "your files stay in Europe" claim true rather than aspirational.
-// null  — Cloudflare's global default. Fine, but not claimable.
+// "weur" suits an audience across Europe and the Middle East. Change it if
+// yours is mostly North America ("enam"/"wnam") or Asia ("apac"), or set it to
+// null to let Cloudflare choose based on where you happen to run this script.
 //
-// Set to null before your first run if you would rather stay global.
+// JURISDICTION is different: a hard regulatory fence (e.g. "eu") that keeps
+// data in one region and gives up Cloudflare's global placement. Only worth it
+// if you need to make a compliance promise. Left off deliberately.
 // ---------------------------------------------------------------------------
-const JURISDICTION = "eu";
+const LOCATION = "weur";
+const JURISDICTION = null;
 
 const run = (args, quiet = false) =>
   execFileSync("npx", ["wrangler", ...args], {
@@ -35,6 +38,13 @@ const run = (args, quiet = false) =>
   });
 
 const step = (msg) => console.log(`\n▸ ${msg}`);
+
+// A jurisdiction overrides the location hint, so never send both.
+const placementFlags = () =>
+  JURISDICTION ? ["--jurisdiction", JURISDICTION] : LOCATION ? ["--location", LOCATION] : [];
+
+const placementLabel = () =>
+  JURISDICTION ? ` (${JURISDICTION.toUpperCase()} jurisdiction)` : LOCATION ? ` (${LOCATION})` : "";
 
 /* 1. Are we logged in? Everything below fails confusingly otherwise. */
 step("Checking authentication");
@@ -48,9 +58,9 @@ try {
 }
 
 /* 2. R2 bucket for the PDFs. */
-step(`Creating R2 bucket "${BUCKET}"${JURISDICTION ? ` in the ${JURISDICTION.toUpperCase()} jurisdiction` : ""}`);
+step(`Creating R2 bucket "${BUCKET}"${placementLabel()}`);
 try {
-  run(["r2", "bucket", "create", BUCKET, ...(JURISDICTION ? ["--jurisdiction", JURISDICTION] : [])], true);
+  run(["r2", "bucket", "create", BUCKET, ...placementFlags()], true);
   console.log("  created");
 } catch (error) {
   const text = String(error.stdout ?? "") + String(error.stderr ?? "");
@@ -63,14 +73,14 @@ try {
 }
 
 /* 3. D1 database, and its id written into wrangler.toml. */
-step(`Creating D1 database "${DATABASE}"${JURISDICTION ? ` in the ${JURISDICTION.toUpperCase()} jurisdiction` : ""}`);
+step(`Creating D1 database "${DATABASE}"${placementLabel()}`);
 let config = readFileSync(resolve(root, "wrangler.toml"), "utf8");
 
 if (!config.includes("PLACEHOLDER_RUN_WRANGLER_D1_CREATE")) {
   console.log("  wrangler.toml already has a database_id");
 } else {
   try {
-    run(["d1", "create", DATABASE, ...(JURISDICTION ? ["--jurisdiction", JURISDICTION] : [])], true);
+    run(["d1", "create", DATABASE, ...placementFlags()], true);
     console.log("  created");
   } catch (error) {
     const text = String(error.stdout ?? "") + String(error.stderr ?? "");
