@@ -50,11 +50,145 @@ export const Layout = ({ title, description, children, script, bare, noindex, us
       {script && <script type="module" src={script} defer />}
     </head>
     <body class="min-h-dvh flex flex-col">
+      {/* Deliberately not on `bare` pages: someone opening a document they were
+          sent is a guest, and interrupting them to explain our release schedule
+          would be about us rather than about them. */}
+      {!bare && <BetaBanner />}
       {!bare && <SiteHeader user={user} />}
       <main class="flex-1">{children}</main>
       {!bare && <SiteFooter />}
+      {!bare && <BetaDialog />}
     </body>
   </html>
+);
+
+/* -------------------------------------------------------------------------- */
+/*  Beta notice                                                                */
+/* -------------------------------------------------------------------------- */
+
+/** Public launch. One constant, so the banner and the dialog cannot disagree. */
+const LAUNCH_DATE = "2026-09-09";
+const LAUNCH_LABEL = "9 September 2026";
+
+/**
+ * A strip that always shows, plus a dialog on the first visit only.
+ *
+ * The dialog is the native <dialog> element with Basecoat's `.dialog` class
+ * doing the styling, so the backdrop, transitions and Escape-to-close are all
+ * the browser's own behaviour rather than something to maintain.
+ */
+const BetaBanner = () => (
+  <div class="border-b border-accent-foreground/15 bg-accent text-accent-foreground">
+    <div class="mx-auto flex w-full max-w-5xl items-center gap-3 px-5 py-2 text-sm">
+      <span class="rounded-full bg-accent-foreground/10 px-2 py-0.5 text-xs font-semibold tracking-wide uppercase">
+        Beta
+      </span>
+      <p class="min-w-0">
+        <span class="font-medium">pdf.sy is still being built.</span>{" "}
+        <span class="hidden sm:inline">Full launch {LAUNCH_LABEL}.</span>
+      </p>
+      <button
+        type="button"
+        data-beta-open
+        class="ml-auto shrink-0 text-xs font-medium underline underline-offset-4 hover:opacity-80"
+      >
+        What works today?
+      </button>
+    </div>
+  </div>
+);
+
+const BetaDialog = () => (
+  <>
+    <dialog class="dialog w-full max-w-md" id="beta-dialog" aria-labelledby="beta-title">
+      <article class="rounded-xl border border-border bg-card p-6 shadow-lg">
+        <header class="mb-3 flex flex-col gap-1">
+          <span class="badge w-fit rounded-full bg-accent px-2 py-0.5 text-xs font-semibold tracking-wide text-accent-foreground uppercase">
+            Beta
+          </span>
+          <h2 id="beta-title" class="mt-1 text-xl font-semibold tracking-tight">
+            You are early
+          </h2>
+          <p class="text-sm text-muted-foreground">
+            pdf.sy launches properly on{" "}
+            <strong class="font-medium text-foreground">{LAUNCH_LABEL}</strong>
+            <span data-beta-countdown />.
+          </p>
+        </header>
+
+        <section class="flex flex-col gap-3 text-sm">
+          <p class="text-muted-foreground">
+            Everything here is real and working, but it is being changed daily.
+            Please do not rely on it for anything that matters yet.
+          </p>
+          <ul class="flex flex-col gap-1.5 text-muted-foreground">
+            <li class="flex gap-2">
+              <span aria-hidden="true" class="text-primary">✓</span>
+              Share a PDF and get a tracked link
+            </li>
+            <li class="flex gap-2">
+              <span aria-hidden="true" class="text-primary">✓</span>
+              See who opened it and which pages they read
+            </li>
+            <li class="flex gap-2">
+              <span aria-hidden="true" class="text-primary">✓</span>
+              Free tools that never upload your file
+            </li>
+            <li class="flex gap-2">
+              <span aria-hidden="true" class="text-muted-foreground/60">•</span>
+              Accounts and paid plans are still being wired up
+            </li>
+          </ul>
+          <p class="text-muted-foreground">
+            Links made without an account are deleted after seven days, so keep
+            your own copy of anything you upload.
+          </p>
+        </section>
+
+        <footer class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button type="button" data-beta-close class="btn" data-variant="outline">
+            Got it
+          </button>
+          <a href="/new" class="btn" data-beta-close>
+            Try it anyway
+          </a>
+        </footer>
+      </article>
+    </dialog>
+
+    <script
+      // Shown once per browser. A notice that reappears on every page load is
+      // not informative, it is just in the way.
+      dangerouslySetInnerHTML={{
+        __html: `(function(){
+  var KEY = 'pdfsy-beta-seen-${LAUNCH_DATE}';
+  var d = document.getElementById('beta-dialog');
+  if (!d) return;
+
+  var days = Math.ceil((Date.parse('${LAUNCH_DATE}T00:00:00Z') - Date.now()) / 86400000);
+  if (days > 0) {
+    document.querySelectorAll('[data-beta-countdown]').forEach(function(el){
+      el.textContent = ' — ' + days + (days === 1 ? ' day' : ' days') + ' away';
+    });
+  }
+
+  var seen;
+  try { seen = localStorage.getItem(KEY); } catch (e) { seen = '1'; }
+  if (!seen && typeof d.showModal === 'function') d.showModal();
+
+  function remember(){ try { localStorage.setItem(KEY, '1'); } catch (e) {} }
+
+  d.addEventListener('close', remember);
+  document.querySelectorAll('[data-beta-close]').forEach(function(el){
+    el.addEventListener('click', function(){ remember(); d.close(); });
+  });
+  document.querySelectorAll('[data-beta-open]').forEach(function(el){
+    el.addEventListener('click', function(){ if (d.showModal) d.showModal(); });
+  });
+})();`,
+      }}
+    />
+  </>
 );
 
 const SiteHeader = ({ user }: { user: SessionUser }) => (

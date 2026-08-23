@@ -73,7 +73,7 @@ pages.get("/", (c) =>
           <ToolCard href="/tools#merge" icon={<Merge class="size-5" />} name="Merge" body="Combine PDFs in any order" />
           <ToolCard href="/tools#split" icon={<Scissors class="size-5" />} name="Split" body="Pull out a page range" />
           <ToolCard href="/tools#rotate" icon={<RotateCw class="size-5" />} name="Rotate" body="Fix sideways scans" />
-          <ToolCard href="/tools#compress" icon={<Shrink class="size-5" />} name="Compress" body="Shrink for email" />
+          <ToolCard href="/tools#compress" icon={<Shrink class="size-5" />} name="Compress" body="Shrink for email" soon />
         </div>
       </section>
     </Layout>,
@@ -88,13 +88,44 @@ const Step = ({ icon, title, body }: { icon: unknown; title: string; body: strin
   </div>
 );
 
-const ToolCard = ({ href, icon, name, body }: { href: string; icon: unknown; name: string; body: string }) => (
-  <a href={href} class="card gap-1 rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/50">
-    <span class="text-muted-foreground">{icon as never}</span>
-    <span class="mt-2 font-medium">{name}</span>
-    <span class="text-sm text-muted-foreground">{body}</span>
-  </a>
-);
+/**
+ * `soon` renders the card as plain markup instead of a link. Advertising a
+ * tool that is not built and letting people click through to nothing is worse
+ * than not listing it — and compression is a phase away, so it stays visible
+ * and honest rather than disappearing.
+ */
+const ToolCard = ({
+  href,
+  icon,
+  name,
+  body,
+  soon,
+}: { href: string; icon: unknown; name: string; body: string; soon?: boolean }) => {
+  const inner = (
+    <>
+      <span class="text-muted-foreground">{icon as never}</span>
+      <span class="mt-2 flex items-center gap-2 font-medium">
+        {name}
+        {soon && (
+          <span class="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+            Soon
+          </span>
+        )}
+      </span>
+      <span class="text-sm text-muted-foreground">{body}</span>
+    </>
+  );
+
+  return soon ? (
+    <div class="card gap-1 rounded-lg border border-dashed border-border bg-card/50 p-4 opacity-70">
+      {inner}
+    </div>
+  ) : (
+    <a href={href} class="card gap-1 rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/50">
+      {inner}
+    </a>
+  );
+};
 
 /* -------------------------------------------------------------------------- */
 /*  Crawlers                                                                   */
