@@ -33,6 +33,9 @@ pages.get("/", (c) =>
           Stop emailing attachments into the void. Share one short link, and know
           who opened it, how long they stayed, and which page they stopped on.
         </p>
+        <p class="mt-3 max-w-[55ch] text-lg font-medium">
+          And with a free account, your links never expire.
+        </p>
         <div class="mt-8 flex flex-wrap gap-3">
           <a href="/new" class="btn" data-size="lg">
             <Upload /> Share a PDF
@@ -108,6 +111,19 @@ pages.get("/new", (c) =>
         <p class="mt-2 text-muted-foreground">
           Drop a file in. You will get a link and a QR code straight away.
         </p>
+        {c.get("user") ? (
+          <p class="mt-4 rounded-lg border border-border bg-accent px-4 py-3 text-sm text-accent-foreground">
+            Signed in — this link is yours and will not expire.
+          </p>
+        ) : (
+          <p class="mt-4 rounded-lg border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
+            Sharing without an account is a scratchpad: the link works for{" "}
+            {c.env.ANON_LINK_TTL_DAYS ?? "7"} days and then stops.{" "}
+            <a href="/login" class="font-medium text-foreground underline">Sign in</a>{" "}
+            and it is yours permanently — free, and it keeps every link you have
+            already made on this device.
+          </p>
+        )}
 
         <form id="upload-form" class="mt-8">
           <label
@@ -120,8 +136,7 @@ pages.get("/new", (c) =>
             </span>
             <span class="font-medium">Choose a PDF or drop it here</span>
             <span id="hint" class="text-sm text-muted-foreground">
-              Up to {c.env.MAX_UPLOAD_MB ?? "25"} MB · links from anonymous uploads expire in{" "}
-              {c.env.ANON_LINK_TTL_DAYS ?? "7"} days
+              Up to {c.env.MAX_UPLOAD_MB ?? "25"} MB
             </span>
             <input id="file" name="file" type="file" accept="application/pdf" class="sr-only" />
           </label>
