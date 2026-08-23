@@ -26,7 +26,7 @@ bucket_name = "pdfsy-files"
 [[d1_databases]]
 binding = "DB"
 database_name = "pdfsy"
-database_id = "PLACEHOLDER_RUN_WRANGLER_D1_CREATE"
+database_id = "b387d45c-68d8-4bdb-b90b-d6a843f84eea"
 
 [vars]
 # SITE_URL is optional: every link is built from the origin the request came in
