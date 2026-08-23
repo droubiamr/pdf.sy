@@ -5,6 +5,9 @@ import { Layout } from "../components/layout";
 import { BarChart, Copy, Link2, Merge, QrCode, RotateCw, Scissors, Shrink, Upload } from "../components/icons";
 import { formatMs } from "../lib/format";
 import { siteUrl } from "../lib/urls";
+import { loadOwnedLink } from "./links";
+import { LinkSettings } from "../components/link-settings";
+import { can } from "../lib/plans";
 
 export const pages = new Hono<Env>();
 
@@ -272,20 +275,11 @@ pages.get("/l/:slug/stats", async (c) => {
   const slug = c.req.param("slug");
   const token = c.req.query("t") ?? "";
 
-  const row = await c.env.DB.prepare(
-    `SELECT l.slug, l.created_at, d.title, d.manage_token, d.owner_id, d.current_version
-       FROM links l JOIN documents d ON d.id = l.document_id
-      WHERE l.slug = ?`,
-  ).bind(slug).first<
-    Pick<Link, "slug" | "created_at"> & Pick<Document, "title" | "manage_token" | "owner_id" | "current_version">
-  >();
-
-  if (!row) return c.notFound();
-
   // Two ways in: the account that owns it, or the token handed out at upload.
   const user = c.get("user");
-  const isOwner = Boolean(user && row.owner_id === user.id);
-  if (!isOwner && (!token || token !== row.manage_token)) {
+  const row = await loadOwnedLink(c.env.DB, slug, user?.id ?? null, token || null);
+
+  if (!row) {
     return c.html(
       <Layout title="Stats — pdf.sy" user={user}>
         <section class="mx-auto w-full max-w-lg px-5 py-24 text-center">
@@ -315,12 +309,12 @@ pages.get("/l/:slug/stats", async (c) => {
   const peak = Math.max(1, ...stats.results.map((p) => p.total_ms));
 
   return c.html(
-    <Layout title={`${row.title} — stats`} user={user}>
+    <Layout title={`${row.name ?? row.title} — stats`} user={user}>
       <section class="mx-auto w-full max-w-3xl px-5 py-12">
         <a href={user ? "/dashboard" : "/new"} class="text-sm text-muted-foreground hover:text-foreground">
           ← {user ? "All your links" : "Share another"}
         </a>
-        <h1 class="mt-3 text-2xl font-semibold tracking-tight">{row.title}</h1>
+        <h1 class="mt-3 text-2xl font-semibold tracking-tight">{row.name ?? row.title}</h1>
         <p class="mt-1 font-mono text-sm text-muted-foreground">{new URL(`/${slug}`, siteUrl(c)).toString()}</p>
 
         <div class="mt-8 grid gap-3 sm:grid-cols-3">
@@ -330,7 +324,14 @@ pages.get("/l/:slug/stats", async (c) => {
         </div>
 
         <h2 class="mt-10 font-semibold">Time spent per page</h2>
-        {stats.results.length === 0 ? (
+        {!can({ plan: row.owner_plan }, "page_analytics") ? (
+          <div class="mt-3 rounded-lg border border-dashed border-input px-5 py-8 text-center">
+            <p class="text-sm text-muted-foreground">
+              Per-page reading time is a Pro feature. You can still see totals above.
+            </p>
+            <a href="/pricing" class="btn mt-4" data-size="sm">See plans</a>
+          </div>
+        ) : stats.results.length === 0 ? (
           <p class="mt-2 text-sm text-muted-foreground">No page data yet. It appears the moment someone opens the link.</p>
         ) : (
           <ul class="mt-3 flex flex-col gap-1.5">
@@ -375,6 +376,14 @@ pages.get("/l/:slug/stats", async (c) => {
             </tbody>
           </table>
         </div>
+        <LinkSettings
+          link={row}
+          token={token || null}
+          user={{ plan: row.owner_plan }}
+          refused={c.req.query("upgrade") ?? null}
+          updatedVersion={c.req.query("updated") ?? null}
+          error={c.req.query("error") ?? null}
+        />
       </section>
     </Layout>,
   );

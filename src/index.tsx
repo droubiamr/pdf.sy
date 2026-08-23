@@ -7,6 +7,8 @@ import { api } from "./routes/api";
 import { view } from "./routes/view";
 import { auth } from "./routes/auth";
 import { dashboard } from "./routes/dashboard";
+import { links } from "./routes/links";
+import { billing } from "./routes/billing";
 import { Layout } from "./components/layout";
 
 const app = new Hono<Env>();
@@ -20,6 +22,8 @@ app.use("*", async (c, next) => {
 
 app.route("/", auth);
 app.route("/", dashboard);
+app.route("/", links);
+app.route("/", billing);
 app.route("/api", api);
 app.route("/", pages);
 

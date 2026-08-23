@@ -16,6 +16,7 @@ exist to feed that link — they are the funnel, not the product.
 | UI components  | [Basecoat](https://basecoatui.com) — shadcn/ui without React |
 | Design         | Untitled UI "Paper" palette, applied as theme variables |
 | Auth           | Magic links, hand-rolled (see below)                   |
+| Billing        | Stripe over REST, no SDK                               |
 | Email          | Resend, with a console fallback when no key is set     |
 | Viewer         | PDF.js, vendored                                       |
 | Browser tools  | pdf-lib, entirely client-side                          |
@@ -45,11 +46,22 @@ npm run setup:cloud      # bucket, database, migrations, deploy
 they are missing, writes the `database_id` into `wrangler.toml`, applies any
 unapplied migrations, builds, and deploys. Re-run it after any migration.
 
-Then, when you want email to actually send rather than land in the Worker log:
+Then the secrets. Each one is optional — without it that feature simply stays
+off rather than breaking:
 
 ```bash
-npx wrangler secret put RESEND_API_KEY
+npx wrangler secret put RESEND_API_KEY        # or email lands in the Worker log
+npx wrangler secret put STRIPE_SECRET_KEY
+npx wrangler secret put STRIPE_WEBHOOK_SECRET
+npx wrangler secret put STRIPE_PRICE_PRO      # price_… for the Pro plan
+npx wrangler secret put STRIPE_PRICE_BUSINESS
 ```
+
+Point a Stripe webhook at `https://<your-host>/api/billing/webhook` for
+`checkout.session.completed`, `customer.subscription.created`,
+`customer.subscription.updated` and `customer.subscription.deleted`.
+
+For local work, put `STRIPE_WEBHOOK_SECRET` in a gitignored `.dev.vars` file.
 
 ### Hostnames
 
@@ -69,12 +81,18 @@ src/
   lib/auth.ts        Magic links, sessions, cookies
   lib/mail.ts        Resend wrapper + email templates
   lib/context.ts     The shared Hono env (bindings + resolved user)
+  lib/plans.ts       Every paid feature, gated through one can()
+  lib/password.ts    PBKDF2 link passwords + the unlock cookie
+  lib/stripe.ts      Checkout, portal, webhook signature verification
+  lib/versions.ts    Resolves which version a link actually serves
   routes/
     pages.tsx        Landing, upload, tools, stats
     api.ts           Upload, view sessions, dwell pings, notifications
     view.tsx         The viewer, the file stream, the QR endpoint
     auth.tsx         Login, magic-link verify, logout, claim
     dashboard.tsx    Your links, with view counts and the notify toggle
+    links.tsx        Link settings, notify toggle, replace-the-file
+    billing.tsx      Pricing, checkout, portal, Stripe webhook
   components/        Layout and icons
   client/            Browser bundles: upload, viewer, tools, dashboard
   styles/app.css     Tailwind + Basecoat + the Paper palette
@@ -94,14 +112,26 @@ and only its SHA-256 is stored**, so a database dump cannot be replayed as a
 login. Links are single-use, expire in 15 minutes, and are rate-limited to five
 per address per hour. Swapping in a library later only touches `src/lib/auth.ts`.
 
-### Two rules worth keeping
+### Three rules worth keeping
+
+**Plans are gated in exactly one place.** Every paid capability goes through
+`can(owner, feature)` in `src/lib/plans.ts`. Scatter plan checks through the
+codebase and repackaging becomes a rewrite.
+
+**Gate on the owner's plan, never the viewer's.** The stats page and its settings
+belong to whoever owns the document, and they can reach it through the upload
+token while signed out.
+
+
 
 **Anything that can run in the browser, runs in the browser.** Merge, split and
 rotate never upload. Server CPU is the only real cost and the only real scaling
 risk.
 
 **Never hand out a raw R2 URL.** Every read goes through `/v/:slug/file`, which
-is what makes revocation, expiry and download-blocking possible at all.
+is what makes revocation, expiry, download-blocking and passwords possible at
+all. The password check lives on that endpoint too, not only on the viewer page —
+otherwise the password protects the wrapper and the document leaks.
 
 ## Notifications
 
@@ -119,11 +149,20 @@ Anonymous uploads still work with no account, and their links expire after
 `manage_token` in `localStorage` is the proof — and claimed links stop expiring.
 That gap is the entire signup pitch, so keep it.
 
+## Link controls
+
+Pro unlocks passwords (PBKDF2, with an unlock cookie derived from the stored
+hash so changing the password invalidates it), expiry, blocking downloads, and
+replacing the file behind a link. Revoking is free for everyone — you can always
+take back something you shared.
+
+Replacing a file adds a version and leaves `pinned_version` NULL, which means
+"serve the latest". Both versions stay in R2 and the view history carries over.
+
 ## What is not built yet
 
-Phases 1 and 2 are done: the tracked link, accounts, the dashboard and open
-notifications. Still to come, in order: the Stripe paywall with passwords,
-expiry and versioning (phase 3), server-side compression (phase 4), then teams,
+Phases 1–3 are done: the tracked link, accounts, notifications, and the paywall
+with link controls. Still to come: server-side compression (phase 4), then teams,
 email gating, watermarks and the public API (phase 5).
 
 ## Abuse

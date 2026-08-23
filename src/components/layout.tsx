@@ -57,6 +57,7 @@ const SiteHeader = ({ user }: { user: SessionUser }) => (
       </a>
       <nav class="ml-auto flex items-center gap-1 text-sm">
         <a href="/tools" class="btn" data-variant="ghost" data-size="sm">Tools</a>
+        <a href="/pricing" class="btn" data-variant="ghost" data-size="sm">Pricing</a>
         {user ? (
           <>
             <a href="/dashboard" class="btn" data-variant="ghost" data-size="sm">Your links</a>

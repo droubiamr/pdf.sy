@@ -5,6 +5,7 @@ import { newId, newManageToken, newSlug, sha256Hex, hashIp, RESERVED_SLUGS } fro
 import { send, openNotificationEmail } from "../lib/mail";
 import { formatMs } from "../lib/format";
 import { siteUrl } from "../lib/urls";
+import { resolveVersion } from "../lib/versions";
 import type { Bindings } from "../db/schema";
 
 export const api = new Hono<Env>();
@@ -105,7 +106,7 @@ api.post("/v/:slug/session", async (c) => {
     .bind(
       id,
       slug,
-      link.pinned_version ?? 1,
+      (await resolveVersion(c.env.DB, link))?.version ?? 1,
       (c.req.raw as { cf?: { country?: string } }).cf?.country ?? null,
       await hashIp(ip, slug),
       c.req.header("sec-ch-ua-mobile") === "?1" ? "mobile" : "desktop",
@@ -136,7 +137,7 @@ api.post("/v/:slug/ping", async (c) => {
   const link = await loadLink(c.env.DB, slug);
   if (!link) return c.json({ error: "not_found" }, 404);
 
-  const version = link.pinned_version ?? 1;
+  const version = (await resolveVersion(c.env.DB, link))?.version ?? 1;
   const pages = (body.pages ?? []).filter((p) => p.page > 0 && p.ms > 0 && p.ms < 3_600_000);
   const totalMs = pages.reduce((a, p) => a + p.ms, 0);
 

@@ -117,18 +117,3 @@ dashboard.get("/dashboard", async (c) => {
   );
 });
 
-/** Mute or unmute the "someone opened it" email for one link. */
-dashboard.post("/api/links/:slug/notify", async (c) => {
-  const user = c.get("user");
-  if (!user) return c.json({ error: "not_signed_in" }, 401);
-
-  const body = await c.req.json<{ enabled?: boolean }>().catch(() => ({}) as { enabled?: boolean });
-  const result = await c.env.DB.prepare(
-    `UPDATE links SET notify_on_view = ?
-      WHERE slug = ?
-        AND document_id IN (SELECT id FROM documents WHERE owner_id = ?)`,
-  ).bind(body.enabled ? 1 : 0, c.req.param("slug"), user.id).run();
-
-  if (result.meta.changes === 0) return c.json({ error: "not_found" }, 404);
-  return c.json({ ok: true });
-});

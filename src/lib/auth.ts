@@ -22,6 +22,10 @@ export type User = {
   plan: string;
   created_at: number;
   last_seen_at: number | null;
+  stripe_customer_id?: string | null;
+  stripe_subscription_id?: string | null;
+  plan_status?: string | null;
+  plan_renews_at?: number | null;
 };
 
 /** 32 random bytes, URL-safe. Never stored — only its hash is. */
