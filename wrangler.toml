@@ -15,6 +15,9 @@ binding = "ASSETS"
 [[r2_buckets]]
 binding = "FILES"
 bucket_name = "pdfsy-files"
+# Must match the jurisdiction the bucket was created in, or the Worker looks in
+# the wrong place and finds nothing. See JURISDICTION in scripts/setup-cloud.mjs.
+jurisdiction = "eu"
 
 # Metadata: documents, links, view sessions, page stats.
 [[d1_databases]]

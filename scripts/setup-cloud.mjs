@@ -12,6 +12,21 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const BUCKET = "pdfsy-files";
 const DATABASE = "pdfsy";
 
+// ---------------------------------------------------------------------------
+// THE ONE THING YOU CANNOT CHANGE LATER.
+//
+// Jurisdiction is fixed when the bucket and database are created. Moving to a
+// different one afterwards means making new resources and copying everything
+// across, so it is worth thirty seconds of thought now.
+//
+// "eu"  — data stays in EU datacenters. GDPR-friendly, and it makes a
+//         "your files stay in Europe" claim true rather than aspirational.
+// null  — Cloudflare's global default. Fine, but not claimable.
+//
+// Set to null before your first run if you would rather stay global.
+// ---------------------------------------------------------------------------
+const JURISDICTION = "eu";
+
 const run = (args, quiet = false) =>
   execFileSync("npx", ["wrangler", ...args], {
     cwd: root,
@@ -33,9 +48,9 @@ try {
 }
 
 /* 2. R2 bucket for the PDFs. */
-step(`Creating R2 bucket "${BUCKET}"`);
+step(`Creating R2 bucket "${BUCKET}"${JURISDICTION ? ` in the ${JURISDICTION.toUpperCase()} jurisdiction` : ""}`);
 try {
-  run(["r2", "bucket", "create", BUCKET], true);
+  run(["r2", "bucket", "create", BUCKET, ...(JURISDICTION ? ["--jurisdiction", JURISDICTION] : [])], true);
   console.log("  created");
 } catch (error) {
   const text = String(error.stdout ?? "") + String(error.stderr ?? "");
@@ -48,14 +63,14 @@ try {
 }
 
 /* 3. D1 database, and its id written into wrangler.toml. */
-step(`Creating D1 database "${DATABASE}"`);
+step(`Creating D1 database "${DATABASE}"${JURISDICTION ? ` in the ${JURISDICTION.toUpperCase()} jurisdiction` : ""}`);
 let config = readFileSync(resolve(root, "wrangler.toml"), "utf8");
 
 if (!config.includes("PLACEHOLDER_RUN_WRANGLER_D1_CREATE")) {
   console.log("  wrangler.toml already has a database_id");
 } else {
   try {
-    run(["d1", "create", DATABASE], true);
+    run(["d1", "create", DATABASE, ...(JURISDICTION ? ["--jurisdiction", JURISDICTION] : [])], true);
     console.log("  created");
   } catch (error) {
     const text = String(error.stdout ?? "") + String(error.stderr ?? "");
@@ -65,7 +80,7 @@ if (!config.includes("PLACEHOLDER_RUN_WRANGLER_D1_CREATE")) {
 
   // Read the id back from the list rather than scraping the create output —
   // the list format is stable and works whether we just made it or not.
-  const list = run(["d1", "list", "--json"], true);
+  const list = run(["d1", "list", "--json", ...(JURISDICTION ? ["--jurisdiction", JURISDICTION] : [])], true);
   const database = JSON.parse(list.slice(list.indexOf("["))).find((d) => d.name === DATABASE);
   if (!database?.uuid) {
     console.error(`  Could not find a database named "${DATABASE}" after creating it.`);
