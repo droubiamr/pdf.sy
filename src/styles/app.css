@@ -4,6 +4,11 @@
 @source "../**/*.tsx";
 @source "../**/*.ts";
 
+/* Tailwind's own `dark:` follows the OS. The header switch sets a class, so
+   point the variant at the class instead — otherwise a page could be dark
+   while every `dark:` utility on it still believed it was light. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ---------------------------------------------------------------------------
    Untitled UI "Paper" palette, mapped onto Basecoat's shadcn variable names.
    Every component in the app reads these — change a value here and the whole
@@ -11,6 +16,9 @@
    --------------------------------------------------------------------------- */
 :root {
   --radius: 0.5rem;
+  /* Scrollbars, form controls and the canvas behind the page are the
+     browser's to paint. This is how it is told which set to use. */
+  color-scheme: light;
 
   --background: #FCFCFD;
   --foreground: #101828;
@@ -45,6 +53,8 @@
 }
 
 .dark {
+  color-scheme: dark;
+
   --background: #0C111D;
   --foreground: #F5F5F6;
 

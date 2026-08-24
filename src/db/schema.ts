@@ -71,8 +71,10 @@ export type Bindings = {
   /** All set with `wrangler secret put`; billing is simply off without them. */
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
-  STRIPE_PRICE_PRO?: string;
-  STRIPE_PRICE_BUSINESS?: string;
+  STRIPE_PRICE_LITE_MONTHLY?: string;
+  STRIPE_PRICE_LITE_YEARLY?: string;
+  STRIPE_PRICE_PRO_MONTHLY?: string;
+  STRIPE_PRICE_PRO_YEARLY?: string;
   ANON_LINK_TTL_DAYS: string;
   MAX_UPLOAD_MB: string;
   /** Public, so it lives in wrangler.toml. Absent means the widget is off. */

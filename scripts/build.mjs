@@ -29,6 +29,7 @@ await esbuild.build({
     viewer: "src/client/viewer.ts",
     tools: "src/client/tools.ts",
     dashboard: "src/client/dashboard.ts",
+    pricing: "src/client/pricing.ts",
   },
   outdir: "public/assets",
   bundle: true,

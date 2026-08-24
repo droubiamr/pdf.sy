@@ -84,3 +84,28 @@ export const Shrink = (p: P) => (
     <path d="M15 15v6m0-6h6m-6 0 6 6M9 9V3m0 6H3m6 0L3 3" />
   </svg>
 );
+
+export const Sun = (p: P) => (
+  <svg {...base} class={p.class}>
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+  </svg>
+);
+
+export const Moon = (p: P) => (
+  <svg {...base} class={p.class}>
+    <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+  </svg>
+);
+
+export const Menu = (p: P) => (
+  <svg {...base} class={p.class}>
+    <path d="M4 12h16M4 6h16M4 18h16" />
+  </svg>
+);
+
+export const X = (p: P) => (
+  <svg {...base} class={p.class}>
+    <path d="M18 6 6 18M6 6l12 12" />
+  </svg>
+);

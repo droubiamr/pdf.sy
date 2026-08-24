@@ -1,5 +1,5 @@
 import type { Child } from "hono/jsx";
-import { FileText } from "./icons";
+import { FileText, Menu, Moon, Sun, X } from "./icons";
 
 /** Public launch. One constant, so the banner and the dialog cannot disagree. */
 const LAUNCH_DATE = "2026-09-09";
@@ -20,9 +20,36 @@ const LAUNCH_LABEL = "9 September 2026";
  * browser will refuse to run it.
  */
 
-// Respect the OS theme before first paint so the page never flashes white.
-const THEME_JS =
-  "if(matchMedia('(prefers-color-scheme: dark)').matches)document.documentElement.classList.add('dark')";
+// Theme. A choice made here wins; with no choice on record the OS decides and
+// keeps deciding, so someone who never touches the switch still gets dark mode
+// when their machine turns dark at sunset.
+//
+// It runs in <head>, before first paint, so the page never flashes the wrong
+// colour. The switch itself is handled by a listener on `document` rather than
+// on the button: the button has not been parsed yet at this point, and a
+// delegated listener does not care.
+const THEME_JS = `(function(){
+  var KEY = 'pdfsy-theme';
+  var root = document.documentElement;
+  var os = matchMedia('(prefers-color-scheme: dark)');
+
+  function chosen(){ try { return localStorage.getItem(KEY); } catch (e) { return null; } }
+  function apply(theme){ root.classList.toggle('dark', theme === 'dark'); }
+
+  apply(chosen() || (os.matches ? 'dark' : 'light'));
+
+  os.addEventListener('change', function(e){
+    if (!chosen()) apply(e.matches ? 'dark' : 'light');
+  });
+
+  document.addEventListener('click', function(e){
+    var el = e.target.closest && e.target.closest('[data-theme-toggle]');
+    if (!el) return;
+    var next = root.classList.contains('dark') ? 'light' : 'dark';
+    apply(next);
+    try { localStorage.setItem(KEY, next); } catch (err) {}
+  });
+})();`;
 
 // Shown once per browser. A notice that reappears on every page load is not
 // informative, it is just in the way.
@@ -53,8 +80,33 @@ const BETA_JS = `(function(){
   });
 })();`;
 
+// Below `sm` the header's links collapse behind a button. Everything visual is
+// CSS — this only flips the display classes and `aria-expanded`, and the icon
+// swap follows from the attribute. Closing on Escape or on a click elsewhere is
+// what a menu is expected to do; neither is free from CSS alone.
+const MENU_JS = `(function(){
+  var btn = document.querySelector('[data-menu-button]');
+  var nav = document.getElementById('site-nav');
+  if (!btn || !nav) return;
+
+  function set(open){
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    // Both, not just 'hidden': a <nav> falls back to display:block, and the
+    // panel's gaps and stacking are a flex column.
+    nav.classList.toggle('hidden', !open);
+    nav.classList.toggle('flex', open);
+  }
+
+  btn.addEventListener('click', function(e){
+    e.stopPropagation();
+    set(btn.getAttribute('aria-expanded') !== 'true');
+  });
+  document.addEventListener('click', function(e){ if (!nav.contains(e.target)) set(false); });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') set(false); });
+})();`;
+
 /** Every inline script on the site. The CSP hashes this list and nothing else. */
-export const INLINE_SCRIPTS: readonly string[] = [THEME_JS, BETA_JS];
+export const INLINE_SCRIPTS: readonly string[] = [THEME_JS, BETA_JS, MENU_JS];
 
 type SessionUser = { email: string } | null | undefined;
 
@@ -205,30 +257,104 @@ const BetaDialog = () => (
   </>
 );
 
+/**
+ * A row of links on a wide screen; a full-width row inside the dropdown on a
+ * narrow one. Centred label text reads as a button and left-aligned reads as a
+ * menu, which is exactly the difference between the two cases.
+ */
+const navItem = "btn w-full justify-start sm:w-auto sm:justify-center";
+
+/**
+ * The links collapse below `sm`, but the theme switch and the one action this
+ * site exists for do not. Both are small, and a visitor on a phone who has to
+ * open a menu to share a PDF has been asked for a tap that buys nothing.
+ */
 const SiteHeader = ({ user }: { user: SessionUser }) => (
-  <header class="border-b border-border">
-    <div class="mx-auto flex h-16 w-full max-w-5xl items-center gap-6 px-5">
-      <a href={user ? "/dashboard" : "/"} class="flex items-center gap-2 font-semibold tracking-tight">
-        <FileText class="size-5 text-primary" />
-        pdf.sy
-      </a>
-      <nav class="ml-auto flex items-center gap-1 text-sm">
-        <a href="/tools" class="btn" data-variant="ghost" data-size="sm">Tools</a>
-        <a href="/pricing" class="btn" data-variant="ghost" data-size="sm">Pricing</a>
-        {user ? (
-          <>
-            <a href="/dashboard" class="btn" data-variant="ghost" data-size="sm">Your links</a>
-            <form method="post" action="/api/auth/logout">
-              <button type="submit" class="btn" data-variant="ghost" data-size="sm">Sign out</button>
-            </form>
-          </>
-        ) : (
-          <a href="/login" class="btn" data-variant="ghost" data-size="sm">Sign in</a>
-        )}
-        <a href="/new" class="btn" data-size="sm">Share a PDF</a>
-      </nav>
-    </div>
-  </header>
+  <>
+    <header class="relative border-b border-border">
+      <div class="mx-auto flex h-16 w-full max-w-5xl items-center gap-4 px-5">
+        <a href={user ? "/dashboard" : "/"} class="flex items-center gap-2 font-semibold tracking-tight">
+          <FileText class="size-5 text-primary" />
+          pdf.sy
+        </a>
+
+        {/* Out of flow and under the header below `sm`, an ordinary flex row
+            above it. `hidden` is the closed state; `sm:flex` outranks it, so
+            the desktop layout never depends on the script having run. */}
+        <nav
+          id="site-nav"
+          class="absolute inset-x-0 top-full z-20 hidden flex-col gap-1 border-b border-border bg-popover p-3 text-sm text-popover-foreground shadow-lg sm:static sm:ml-auto sm:flex sm:flex-row sm:items-center sm:gap-1 sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none"
+        >
+          <a href="/tools" class={navItem} data-variant="ghost" data-size="sm">Tools</a>
+          <a href="/pricing" class={navItem} data-variant="ghost" data-size="sm">Pricing</a>
+          {user ? (
+            <>
+              <a href="/dashboard" class={navItem} data-variant="ghost" data-size="sm">Your links</a>
+              <form method="post" action="/api/auth/logout" class="w-full sm:w-auto">
+                <button type="submit" class={navItem} data-variant="ghost" data-size="sm">Sign out</button>
+              </form>
+            </>
+          ) : (
+            <a href="/login" class={navItem} data-variant="ghost" data-size="sm">Sign in</a>
+          )}
+        </nav>
+
+        {/* The action first, then the two icon buttons together as a pair. */}
+        <div class="ml-auto flex items-center gap-1 sm:ml-0">
+          <a href="/new" class="btn" data-size="sm">Share a PDF</a>
+          <ThemeToggle />
+          <MenuButton />
+        </div>
+      </div>
+    </header>
+
+    <script dangerouslySetInnerHTML={{ __html: MENU_JS }} />
+  </>
+);
+
+/**
+ * The icon follows `aria-expanded` rather than a class of its own, so the
+ * attribute a screen reader is told about and the one a sighted visitor sees
+ * cannot drift apart — there is only the one.
+ */
+const MenuButton = () => (
+  <button
+    type="button"
+    data-menu-button
+    class="btn group sm:hidden"
+    data-variant="ghost"
+    data-size="icon-sm"
+    aria-controls="site-nav"
+    aria-expanded="false"
+    aria-label="Menu"
+  >
+    <Menu class="group-aria-expanded:hidden" aria-hidden="true" />
+    <X class="hidden group-aria-expanded:block" aria-hidden="true" />
+  </button>
+);
+
+/**
+ * One button, two icons, and only ever one of them drawn. Which one is a
+ * question of what the page currently looks like, so CSS answers it — nothing
+ * has to be re-rendered or kept in sync when the theme changes.
+ *
+ * The label is deliberately state-free. The server cannot know which theme the
+ * browser will land on, so a name like "Switch to dark mode" would be a coin
+ * toss in the accessibility tree until JavaScript corrected it.
+ */
+const ThemeToggle = () => (
+  <button
+    type="button"
+    data-theme-toggle
+    class="btn"
+    data-variant="ghost"
+    data-size="icon-sm"
+    title="Switch theme"
+    aria-label="Switch between light and dark mode"
+  >
+    <Sun class="hidden dark:block" aria-hidden="true" />
+    <Moon class="dark:hidden" aria-hidden="true" />
+  </button>
 );
 
 const SiteFooter = () => (

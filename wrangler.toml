@@ -70,3 +70,34 @@ TURNSTILE_SITE_KEY = "0x4AAAAAAEZr2gYqpkziK-NN"
 #   npx wrangler secret put RESEND_API_KEY
 # Without it, mail is printed to the console instead of sent, which is exactly
 # what you want locally.
+
+# Stripe price IDs. Not secrets — they identify a price, they do not authorise
+# a charge, and the checkout form posts them to Stripe anyway. The two that ARE
+# secret live outside this file:
+#
+#   npx wrangler secret put STRIPE_SECRET_KEY
+#   npx wrangler secret put STRIPE_WEBHOOK_SECRET
+#
+# Without STRIPE_SECRET_KEY the pricing page still renders and the buttons
+# still click; checkout redirects back to /pricing?error=billing_not_configured
+# rather than failing hard. That is deliberate — a fresh clone runs with no
+# Stripe account at all.
+#
+# These are LIVE-mode prices — real money. Test mode issues different IDs for
+# the same products, so nothing here works against a sk_test_ key and nothing
+# from test mode works against these.
+#
+# Four, because Stripe has no concept of "the yearly version of this price" —
+# monthly and yearly are separate, unrelated objects. Prices are also immutable:
+# one cannot be edited from $32 to $3, only archived and replaced.
+#
+# The yearly prices are the full annual charge. The page quotes them divided by
+# twelve ($2 and $8) because that is the number people compare, so the amounts
+# here will never match the amounts on screen — that is correct, not a bug.
+#
+#   Lite   $3/mo    $24/yr   (shown as $2/mo, billed yearly)
+#   Pro    $12/mo   $96/yr   (shown as $8/mo, billed yearly)
+STRIPE_PRICE_LITE_MONTHLY = "price_1U7puoCirj36Az1Wx5XP4Rzs"
+STRIPE_PRICE_LITE_YEARLY = "price_1U7pxcCirj36Az1WbsbtrFWS"
+STRIPE_PRICE_PRO_MONTHLY = "price_1U7pvjCirj36Az1W8E1ejjol"
+STRIPE_PRICE_PRO_YEARLY = "price_1U7pyRCirj36Az1W6IdHqvDv"

@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../lib/context";
 import type { Bindings } from "../db/schema";
 import { Layout } from "../components/layout";
-import { PRICING, planOf, type Plan } from "../lib/plans";
+import { PRICING, planOf, type Plan, type BillingPeriod } from "../lib/plans";
 import { createCheckoutSession, createPortalSession, verifyWebhook, type StripeEvent } from "../lib/stripe";
 import { siteUrl } from "../lib/urls";
 
@@ -18,7 +18,8 @@ billing.get("/pricing", (c) => {
     <Layout
       user={user}
       title="Pricing — pdf.sy"
-      description="Free to share. Twelve dollars a month to know who read it."
+      description="Free to share. Three dollars a month to know who read it."
+      script="/assets/pricing.js"
     >
       <section class="mx-auto w-full max-w-4xl px-5 py-16">
         <h1 class="text-3xl font-semibold tracking-tight">Simple pricing</h1>
@@ -27,9 +28,12 @@ billing.get("/pricing", (c) => {
           of a product. You pay when you want to know what happened after you sent it.
         </p>
 
-        <div class="mt-10 grid items-stretch gap-4 md:grid-cols-3">
+        <PeriodToggle />
+
+        <div class="mt-6 grid items-stretch gap-4 md:grid-cols-3">
           <Tier
-            name="Free" price="$0" period="forever" current={Boolean(user) && current === "free"}
+            name="Free" monthly={{ amount: "$0", note: "forever" }}
+            current={Boolean(user) && current === "free"}
             features={[
               "5 active links",
               "Total view counts",
@@ -39,8 +43,8 @@ billing.get("/pricing", (c) => {
             ]}
           />
           <Tier
-            name={PRICING.pro.label} price={PRICING.pro.price} period={PRICING.pro.period}
-            highlight current={Boolean(user) && current === "pro"} plan="pro"
+            name={PRICING.lite.label} monthly={PRICING.lite.monthly} yearly={PRICING.lite.yearly}
+            highlight current={Boolean(user) && current === "lite"} plan="lite"
             features={[
               "Unlimited links",
               "Per-page reading time",
@@ -51,10 +55,10 @@ billing.get("/pricing", (c) => {
             ]}
           />
           <Tier
-            name={PRICING.business.label} price={PRICING.business.price} period={PRICING.business.period}
-            current={Boolean(user) && current === "business"} plan="business"
+            name={PRICING.pro.label} monthly={PRICING.pro.monthly} yearly={PRICING.pro.yearly}
+            current={Boolean(user) && current === "pro"} plan="pro"
             features={[
-              "Everything in Pro",
+              "Everything in Lite",
               "Team spaces",
               "Require an email to view",
               "Per-viewer watermarks",
@@ -75,18 +79,74 @@ billing.get("/pricing", (c) => {
   );
 });
 
+/**
+ * Monthly / yearly switch.
+ *
+ * Two buttons in a labelled group rather than Basecoat's tabs: a tab owes the
+ * browser a tabpanel, and there is one grid of cards here, not two. The look is
+ * the same segmented control, drawn from the same theme variables.
+ *
+ * It renders with Monthly pressed and the yearly prices already in the markup
+ * but hidden, so a visitor whose JavaScript never arrives still gets a working
+ * monthly page rather than a blank one.
+ */
+const PeriodToggle = () => (
+  <div
+    id="billing-period"
+    role="group"
+    aria-label="Billing period"
+    class="mt-8 inline-flex w-fit items-center gap-1 rounded-lg bg-muted p-1"
+  >
+    <PeriodButton period="monthly" label="Monthly" pressed />
+    <PeriodButton period="yearly" label="Yearly" />
+  </div>
+);
+
+const PeriodButton = ({
+  period, label, pressed,
+}: { period: BillingPeriod; label: string; pressed?: boolean }) => (
+  <button
+    type="button"
+    data-period={period}
+    aria-pressed={pressed ? "true" : "false"}
+    class="rounded-md px-4 py-1.5 text-sm font-medium text-muted-foreground transition-colors aria-pressed:bg-card aria-pressed:text-foreground aria-pressed:shadow-sm"
+  >
+    {label}
+    {period === "yearly" && <span class="ml-1.5 text-xs font-normal text-primary">Save 33%</span>}
+  </button>
+);
+
+type TierPrice = { amount: string; note: string };
+
+const Price = ({ amount, note }: TierPrice) => (
+  <>
+    <span class="text-3xl font-semibold tracking-tight">{amount}</span>
+    <span class="ml-1.5 text-sm text-muted-foreground">{note}</span>
+  </>
+);
+
 const Tier = ({
-  name, price, period, features, highlight, current, plan,
+  name, monthly, yearly, features, highlight, current, plan,
 }: {
-  name: string; price: string; period: string; features: string[];
+  name: string;
+  monthly: TierPrice;
+  /** Absent on Free — there is nothing to switch between. */
+  yearly?: TierPrice;
+  features: string[];
   highlight?: boolean; current: boolean; plan?: Plan;
 }) => (
   <div class={`card h-full rounded-xl border bg-card p-6 ${highlight ? "border-primary shadow-sm" : "border-border"}`}>
     <header class="mb-4">
       <h2 class="card-title font-semibold">{name}</h2>
       <p class="mt-2">
-        <span class="text-3xl font-semibold tracking-tight">{price}</span>
-        <span class="ml-1.5 text-sm text-muted-foreground">{period}</span>
+        {yearly ? (
+          <>
+            <span data-period-price="monthly"><Price {...monthly} /></span>
+            <span data-period-price="yearly" hidden><Price {...yearly} /></span>
+          </>
+        ) : (
+          <Price {...monthly} />
+        )}
       </p>
     </header>
     <ul class="flex flex-col gap-2 text-sm">
@@ -103,6 +163,9 @@ const Tier = ({
       ) : plan ? (
         <form method="post" action="/api/billing/checkout" class="w-full">
           <input type="hidden" name="plan" value={plan} />
+          {/* Rewritten by the toggle. Defaults to monthly so a submit that
+              beats the script still buys a real price rather than nothing. */}
+          <input type="hidden" name="period" value="monthly" data-period-input="1" />
           <button type="submit" class="btn w-full" data-variant={highlight ? "primary" : "outline"}>
             Choose {name}
           </button>
@@ -122,7 +185,15 @@ billing.post("/api/billing/checkout", async (c) => {
 
   const form = await c.req.formData();
   const plan = String(form.get("plan") ?? "pro") as Plan;
-  const priceId = plan === "business" ? c.env.STRIPE_PRICE_BUSINESS : c.env.STRIPE_PRICE_PRO;
+  const period: BillingPeriod = form.get("period") === "yearly" ? "yearly" : "monthly";
+
+  // Four prices, one per plan-and-period pair. Stripe has no notion of "the
+  // yearly version of this price" — they are unrelated objects with unrelated
+  // IDs, so the mapping has to live somewhere and this is the somewhere.
+  const priceId =
+    plan === "lite"
+      ? period === "yearly" ? c.env.STRIPE_PRICE_LITE_YEARLY : c.env.STRIPE_PRICE_LITE_MONTHLY
+      : period === "yearly" ? c.env.STRIPE_PRICE_PRO_YEARLY : c.env.STRIPE_PRICE_PRO_MONTHLY;
 
   if (!c.env.STRIPE_SECRET_KEY || !priceId) {
     return c.redirect("/pricing?error=billing_not_configured", 303);

@@ -17,6 +17,7 @@ export const auth = new Hono<Env>();
 auth.get("/login", async (c) => {
   if (c.get("user")) return c.redirect("/dashboard");
   const sent = c.req.query("sent") === "1";
+  const unverified = c.req.query("verify") === "1";
 
   return c.html(
     <Layout title="Sign in — pdf.sy" noindex>
@@ -36,6 +37,12 @@ auth.get("/login", async (c) => {
             <p class="mt-2 text-muted-foreground">
               No password. We email you a link that signs you straight in.
             </p>
+            {unverified && (
+              <p class="mt-6 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                No link was sent — the human check below was not completed. Tick
+                it, then press the button again.
+              </p>
+            )}
             <form method="post" action="/api/auth/magic-link" class="mt-8 flex flex-col gap-3">
               <label for="email" class="label text-sm font-medium">Email</label>
               <input
@@ -76,11 +83,21 @@ auth.post("/api/auth/magic-link", async (c) => {
   // as every other refusal on this route.
   const human = await verifyTurnstile(c, tokenFrom(form), "login");
 
+  // The one refusal on this route that is *not* silent, and the exception is
+  // deliberate. Everything below stays vague because whether an address has an
+  // account is nobody's business — but the challenge is rendered on the page,
+  // so saying it did not pass leaks nothing that is not already visible. The
+  // widget is `interaction-only`, meaning it stays invisible until it wants a
+  // click, so the common case is someone who never saw a checkbox appear.
+  // Sending them to "check your email" for a link that was never sent leaves
+  // them waiting on nothing.
+  if (!human) return c.redirect("/login?verify=1", 303);
+
   // Deliberately vague and always the same response: this endpoint must not
   // reveal which addresses have accounts, and must not stall on the mail API.
   // A refusal is silent for the same reason — telling a caller they have been
   // limited also tells them the limit exists and where it sits.
-  if (human && verdict.ok && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+  if (verdict.ok && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     const token = await createMagicLink(c.env.DB, email);
     if (token) {
       const url = new URL(`/auth/verify?token=${encodeURIComponent(token)}`, siteUrl(c)).toString();
