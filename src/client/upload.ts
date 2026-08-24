@@ -1,6 +1,9 @@
 // Upload page. XHR rather than fetch, purely because fetch still cannot report
 // upload progress and a progress bar is the difference between "is it stuck?"
 // and "it's working".
+import { TOKEN_FIELD, turnstileToken, resetTurnstile } from "./turnstile";
+
+const TURNSTILE = "#turnstile-upload";
 
 const form = document.getElementById("upload-form") as HTMLFormElement;
 const input = document.getElementById("file") as HTMLInputElement;
@@ -22,7 +25,7 @@ type UploadResponse = {
 
 input.addEventListener("change", () => {
   const file = input.files?.[0];
-  if (file) upload(file);
+  if (file) void upload(file);
 });
 
 for (const event of ["dragenter", "dragover"] as const) {
@@ -39,7 +42,7 @@ for (const event of ["dragleave", "drop"] as const) {
 }
 dropzone.addEventListener("drop", (e) => {
   const file = (e as DragEvent).dataTransfer?.files?.[0];
-  if (file) upload(file);
+  if (file) void upload(file);
 });
 
 function fail(message: string) {
@@ -48,16 +51,27 @@ function fail(message: string) {
   progress.classList.add("hidden");
 }
 
-function upload(file: File) {
+async function upload(file: File) {
   errorEl.classList.add("hidden");
   form.classList.remove("hidden");
   progress.classList.remove("hidden");
   bar.style.width = "0%";
+
+  // The challenge usually finishes long before a file is chosen, but a drop
+  // within the first moment of the page can beat it. Say what is happening
+  // rather than showing a stalled progress bar.
+  progressLabel.textContent = "Checking your browser…";
+  const token = await turnstileToken(TURNSTILE);
+  if (token === null && document.querySelector(TURNSTILE)) {
+    return fail("Could not verify your browser. Reload the page and try again.");
+  }
+
   progressLabel.textContent = `Uploading ${file.name}…`;
 
   const body = new FormData();
   body.set("file", file);
   body.set("title", file.name.replace(/\.pdf$/i, ""));
+  if (token) body.set(TOKEN_FIELD, token);
 
   const xhr = new XMLHttpRequest();
   xhr.open("POST", "/api/documents");
@@ -72,6 +86,10 @@ function upload(file: File) {
   xhr.addEventListener("error", () => fail("The upload failed. Check your connection and try again."));
 
   xhr.addEventListener("load", () => {
+    // A token is spent whether or not the upload succeeded, so the widget needs
+    // a fresh one before anyone tries again.
+    resetTurnstile(TURNSTILE);
+
     if (xhr.status >= 400) {
       let message = "Something went wrong. Try again.";
       try { message = JSON.parse(xhr.responseText).error ?? message; } catch { /* keep the default */ }

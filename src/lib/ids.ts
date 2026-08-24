@@ -21,6 +21,26 @@ export async function sha256Hex(data: ArrayBuffer | Uint8Array): Promise<string>
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/**
+ * Compares two secrets without giving away where they first differ.
+ *
+ * Every token here is long and random enough that a timing oracle is not a
+ * realistic way in, so this is consistency rather than a fix for something
+ * exploitable. It is worth having anyway: `===` on a secret is the kind of
+ * thing that gets copied into the next comparison, and that one may not have
+ * 165 bits of entropy behind it.
+ *
+ * Length is compared eagerly and does leak — irrelevant for the fixed-length
+ * tokens this is used on.
+ */
+export function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 // Unique-visitor counting without storing anyone's IP. The salt rotates daily,
 // so yesterday's hashes cannot be correlated with today's.
 export async function hashIp(ip: string, salt: string): Promise<string> {

@@ -1,6 +1,61 @@
 import type { Child } from "hono/jsx";
 import { FileText } from "./icons";
 
+/** Public launch. One constant, so the banner and the dialog cannot disagree. */
+const LAUNCH_DATE = "2026-09-09";
+const LAUNCH_LABEL = "9 September 2026";
+
+/* -------------------------------------------------------------------------- */
+/*  Inline scripts                                                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Both inline blocks live here as constants because the Content-Security-Policy
+ * allows them by SHA-256 hash. `lib/security.ts` hashes exactly these strings,
+ * so the script that runs and the script that was measured are the same bytes
+ * by construction rather than by anyone remembering to keep two copies in step.
+ *
+ * Editing either string changes its hash, and the policy follows automatically.
+ * Adding a third inline script means adding it to INLINE_SCRIPTS below, or the
+ * browser will refuse to run it.
+ */
+
+// Respect the OS theme before first paint so the page never flashes white.
+const THEME_JS =
+  "if(matchMedia('(prefers-color-scheme: dark)').matches)document.documentElement.classList.add('dark')";
+
+// Shown once per browser. A notice that reappears on every page load is not
+// informative, it is just in the way.
+const BETA_JS = `(function(){
+  var KEY = 'pdfsy-beta-seen-${LAUNCH_DATE}';
+  var d = document.getElementById('beta-dialog');
+  if (!d) return;
+
+  var days = Math.ceil((Date.parse('${LAUNCH_DATE}T00:00:00Z') - Date.now()) / 86400000);
+  if (days > 0) {
+    document.querySelectorAll('[data-beta-countdown]').forEach(function(el){
+      el.textContent = ' — ' + days + (days === 1 ? ' day' : ' days') + ' away';
+    });
+  }
+
+  var seen;
+  try { seen = localStorage.getItem(KEY); } catch (e) { seen = '1'; }
+  if (!seen && typeof d.showModal === 'function') d.showModal();
+
+  function remember(){ try { localStorage.setItem(KEY, '1'); } catch (e) {} }
+
+  d.addEventListener('close', remember);
+  document.querySelectorAll('[data-beta-close]').forEach(function(el){
+    el.addEventListener('click', function(){ remember(); d.close(); });
+  });
+  document.querySelectorAll('[data-beta-open]').forEach(function(el){
+    el.addEventListener('click', function(){ if (d.showModal) d.showModal(); });
+  });
+})();`;
+
+/** Every inline script on the site. The CSP hashes this list and nothing else. */
+export const INLINE_SCRIPTS: readonly string[] = [THEME_JS, BETA_JS];
+
 type SessionUser = { email: string } | null | undefined;
 
 type Props = {
@@ -40,13 +95,7 @@ export const Layout = ({ title, description, children, script, bare, noindex, us
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"
       />
       <link rel="stylesheet" href="/assets/app.css" />
-      <script
-        // Respect the OS theme before first paint so the page never flashes white.
-        dangerouslySetInnerHTML={{
-          __html:
-            "if(matchMedia('(prefers-color-scheme: dark)').matches)document.documentElement.classList.add('dark')",
-        }}
-      />
+      <script dangerouslySetInnerHTML={{ __html: THEME_JS }} />
       {script && <script type="module" src={script} defer />}
     </head>
     <body class="min-h-dvh flex flex-col">
@@ -65,10 +114,6 @@ export const Layout = ({ title, description, children, script, bare, noindex, us
 /* -------------------------------------------------------------------------- */
 /*  Beta notice                                                                */
 /* -------------------------------------------------------------------------- */
-
-/** Public launch. One constant, so the banner and the dialog cannot disagree. */
-const LAUNCH_DATE = "2026-09-09";
-const LAUNCH_LABEL = "9 September 2026";
 
 /**
  * A strip that always shows, plus a dialog on the first visit only.
@@ -156,38 +201,7 @@ const BetaDialog = () => (
       </article>
     </dialog>
 
-    <script
-      // Shown once per browser. A notice that reappears on every page load is
-      // not informative, it is just in the way.
-      dangerouslySetInnerHTML={{
-        __html: `(function(){
-  var KEY = 'pdfsy-beta-seen-${LAUNCH_DATE}';
-  var d = document.getElementById('beta-dialog');
-  if (!d) return;
-
-  var days = Math.ceil((Date.parse('${LAUNCH_DATE}T00:00:00Z') - Date.now()) / 86400000);
-  if (days > 0) {
-    document.querySelectorAll('[data-beta-countdown]').forEach(function(el){
-      el.textContent = ' — ' + days + (days === 1 ? ' day' : ' days') + ' away';
-    });
-  }
-
-  var seen;
-  try { seen = localStorage.getItem(KEY); } catch (e) { seen = '1'; }
-  if (!seen && typeof d.showModal === 'function') d.showModal();
-
-  function remember(){ try { localStorage.setItem(KEY, '1'); } catch (e) {} }
-
-  d.addEventListener('close', remember);
-  document.querySelectorAll('[data-beta-close]').forEach(function(el){
-    el.addEventListener('click', function(){ remember(); d.close(); });
-  });
-  document.querySelectorAll('[data-beta-open]').forEach(function(el){
-    el.addEventListener('click', function(){ if (d.showModal) d.showModal(); });
-  });
-})();`,
-      }}
-    />
+    <script dangerouslySetInnerHTML={{ __html: BETA_JS }} />
   </>
 );
 

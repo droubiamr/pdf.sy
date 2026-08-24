@@ -2,6 +2,9 @@
 // work locally, which is both faster than uploading and a genuine privacy claim
 // we can make on the marketing page without an asterisk.
 import { PDFDocument, degrees } from "pdf-lib";
+import { TOKEN_FIELD, turnstileToken, resetTurnstile } from "./turnstile";
+
+const TURNSTILE = "#turnstile-tools";
 
 const status = document.getElementById("tool-status") as HTMLParagraphElement;
 const runButton = document.getElementById("run") as HTMLButtonElement;
@@ -125,7 +128,20 @@ shareButton?.addEventListener("click", async () => {
   body.set("file", new File([output], "pdfsy-output.pdf", { type: "application/pdf" }));
   body.set("title", "Edited document");
 
+  // This posts to the same guarded endpoint as the upload page, so it needs the
+  // same token. Easy to miss: the two flows share a server route but not a
+  // client, and protecting only one of them silently breaks the other.
+  const token = await turnstileToken(TURNSTILE);
+  if (token === null && document.querySelector(TURNSTILE)) {
+    status.textContent = "Could not verify your browser. Reload the page and try again.";
+    shareButton.disabled = false;
+    return;
+  }
+  if (token) body.set(TOKEN_FIELD, token);
+
   const response = await fetch("/api/documents", { method: "POST", body });
+  resetTurnstile(TURNSTILE);
+
   if (!response.ok) {
     status.textContent = "The link could not be created. Download the file instead.";
     shareButton.disabled = false;

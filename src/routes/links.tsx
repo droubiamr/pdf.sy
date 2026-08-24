@@ -3,7 +3,9 @@ import type { Env } from "../lib/context";
 import type { Link, Document } from "../db/schema";
 import { can } from "../lib/plans";
 import { hashPassword } from "../lib/password";
-import { newId, sha256Hex } from "../lib/ids";
+import { newId, sha256Hex, timingSafeEqual } from "../lib/ids";
+import { inspectPdf } from "../lib/pdf";
+import { hitByClient } from "../lib/limits";
 
 export const links = new Hono<Env>();
 
@@ -16,7 +18,14 @@ export type OwnedLink = Link & {
   owner_plan: string | null;
 };
 
-/** A link the caller may administer: by account, or by the upload token. */
+/**
+ * A link the caller may administer: by account, or by the upload token.
+ *
+ * A deleted document is gone for its owner too — otherwise the stats page
+ * remains a working handle on something that is supposed to no longer exist.
+ * A *blocked* one deliberately stays reachable here: the owner should be able
+ * to see what happened to it, and `loadLink` already stops it serving.
+ */
 export async function loadOwnedLink(
   db: D1Database, slug: string, userId: string | null, token: string | null,
 ): Promise<OwnedLink | null> {
@@ -25,12 +34,12 @@ export async function loadOwnedLink(
        FROM links l
        JOIN documents d ON d.id = l.document_id
        LEFT JOIN users u ON u.id = d.owner_id
-      WHERE l.slug = ?`,
+      WHERE l.slug = ? AND d.deleted_at IS NULL`,
   ).bind(slug).first<OwnedLink>();
 
   if (!row) return null;
   const byAccount = userId !== null && row.owner_id === userId;
-  const byToken = token !== null && token === row.manage_token;
+  const byToken = token !== null && timingSafeEqual(token, row.manage_token);
   return byAccount || byToken ? row : null;
 }
 
@@ -63,11 +72,15 @@ links.post("/l/:slug/settings", async (c) => {
   const name = (form.get("name") as string | null)?.trim();
   if (name) { fields.push("name = ?"); values.push(name.slice(0, 200)); }
 
+  // Bounded before it reaches PBKDF2. The iteration count dominates the cost
+  // rather than the input length, but there is no reason to hash a megabyte.
+  const MAX_PASSWORD = 256;
+
   // Revoking is never gated: everyone can take back a link they shared.
   if (form.get("revoked") === "1") { fields.push("revoked_at = ?"); values.push(Date.now()); }
   else if (form.get("revoked") === "0") { fields.push("revoked_at = NULL"); }
 
-  const password = (form.get("password") as string | null) ?? "";
+  const password = ((form.get("password") as string | null) ?? "").slice(0, MAX_PASSWORD);
   if (form.get("clear_password") === "1") gated("password", "password_hash", null);
   else if (password) gated("password", "password_hash", await hashPassword(password));
 
@@ -113,6 +126,21 @@ links.post("/api/links/:slug/notify", async (c) => {
 links.post("/l/:slug/version", async (c) => {
   const slug = c.req.param("slug");
   const user = c.get("user");
+
+  const maxBytes = Number(c.env.MAX_UPLOAD_MB ?? 25) * 1024 * 1024;
+  const declared = Number(c.req.header("content-length") ?? 0);
+  if (declared > maxBytes + 1024 * 1024) {
+    return c.redirect(`/l/${slug}/stats?error=too_large`, 303);
+  }
+
+  // This route writes to R2 exactly like /api/documents does, so it needs the
+  // same ceiling. A limit on one upload path and not the other is not a limit.
+  // Back to the page they submitted from, not a bare 429 body: this is a form
+  // post by someone signed in, and the other failures on this route already
+  // redirect with a reason.
+  const burst = await hitByClient(c, "uploadBurst");
+  if (!burst.ok) return c.redirect(`/l/${slug}/stats?error=rate_limited`, 303);
+
   const form = await c.req.formData();
   const token = (form.get("t") as string | null) ?? null;
 
@@ -123,16 +151,19 @@ links.post("/l/:slug/version", async (c) => {
   if (!can({ plan: link.owner_plan }, "versioning")) return c.redirect(`${back}?upgrade=versioning`, 303);
 
   const file = form.get("file");
-  if (!(file instanceof File) || file.type !== "application/pdf") {
-    return c.redirect(`${back}?error=not_a_pdf`, 303);
-  }
-  const maxBytes = Number(c.env.MAX_UPLOAD_MB ?? 25) * 1024 * 1024;
+  if (!(file instanceof File)) return c.redirect(`${back}?error=not_a_pdf`, 303);
   if (file.size > maxBytes) return c.redirect(`${back}?error=too_large`, 303);
 
   const bytes = await file.arrayBuffer();
-  if (new TextDecoder().decode(new Uint8Array(bytes.slice(0, 5))) !== "%PDF-") {
-    return c.redirect(`${back}?error=not_a_pdf`, 303);
+  const verdict = await inspectPdf(bytes);
+  if (!verdict.ok) {
+    return c.redirect(`${back}${back.includes("?") ? "&" : "?"}error=${verdict.code}`, 303);
   }
+
+  const sha256 = await sha256Hex(bytes);
+  const blocked = await c.env.DB.prepare(`SELECT sha256 FROM blocked_hashes WHERE sha256 = ?`)
+    .bind(sha256).first();
+  if (blocked) return c.redirect(`${back}${back.includes("?") ? "&" : "?"}error=blocked`, 303);
 
   const document = await c.env.DB.prepare(`SELECT current_version FROM documents WHERE id = ?`)
     .bind(link.document_id).first<Pick<Document, "current_version">>();
@@ -148,7 +179,7 @@ links.post("/l/:slug/version", async (c) => {
     c.env.DB.prepare(
       `INSERT INTO document_versions (id, document_id, version, r2_key, sha256, size_bytes, page_count, created_at)
        VALUES (?, ?, ?, ?, ?, ?, NULL, ?)`,
-    ).bind(newId(), link.document_id, version, r2Key, await sha256Hex(bytes), file.size, Date.now()),
+    ).bind(newId(), link.document_id, version, r2Key, sha256, file.size, Date.now()),
     c.env.DB.prepare(`UPDATE documents SET current_version = ? WHERE id = ?`)
       .bind(version, link.document_id),
     // Links that follow "latest" pick this up for free; pinned ones stay put.

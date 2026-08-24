@@ -1,7 +1,10 @@
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import type { Env } from "./lib/context";
+import type { Bindings } from "./db/schema";
 import { currentUser, SESSION_COOKIE } from "./lib/auth";
+import { securityHeaders } from "./lib/security";
+import { sweep } from "./lib/retention";
 import { pages } from "./routes/pages";
 import { api } from "./routes/api";
 import { view } from "./routes/view";
@@ -13,6 +16,10 @@ import { legal } from "./routes/legal";
 import { Layout } from "./components/layout";
 
 const app = new Hono<Env>();
+
+// First and outermost, so it also covers 404s, thrown errors, and every static
+// asset — the responses easiest to forget and just as worth protecting.
+app.use("*", securityHeaders);
 
 // Resolve the signed-in user once per request. The cookie check first means
 // anonymous viewer traffic — the overwhelming majority — costs no query at all.
@@ -45,4 +52,21 @@ app.notFound((c) =>
   ),
 );
 
-export default app;
+/**
+ * Two entry points now, not one.
+ *
+ * `scheduled` is what makes the deletion promise in the privacy policy true:
+ * expiry alone only stopped a link resolving, and the file stayed in R2
+ * indefinitely. See lib/retention.ts. The cron itself is declared in
+ * wrangler.toml — without that entry this handler is never called.
+ */
+export default {
+  fetch: (request: Request, env: Bindings, ctx: ExecutionContext) =>
+    app.fetch(request, env, ctx),
+
+  scheduled: (_event: ScheduledController, env: Bindings, ctx: ExecutionContext) => {
+    ctx.waitUntil(
+      sweep(env).catch((error) => console.error("retention sweep failed", error)),
+    );
+  },
+} satisfies ExportedHandler<Bindings>;

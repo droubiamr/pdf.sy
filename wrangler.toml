@@ -1,4 +1,9 @@
-name = "pdfsy"
+# Must match the Worker that actually exists on the account. It is "pdf-sy"
+# with the hyphen; a mismatch here does not error, it quietly deploys to a
+# second, brand-new Worker and leaves the live one untouched. The D1 database
+# and R2 bucket are named without the hyphen — that is correct, they are
+# separate resources and their names are set below.
+name = "pdf-sy"
 main = "src/index.tsx"
 compatibility_date = "2026-08-22"
 compatibility_flags = ["nodejs_compat"]
@@ -8,6 +13,13 @@ compatibility_flags = ["nodejs_compat"]
 # people's uploads at times you are not watching a terminal.
 [observability]
 enabled = true
+
+# The nightly retention sweep. Without this entry the `scheduled` handler in
+# src/index.tsx is dead code, expired files stay in R2 for good, and the
+# deletion promise in the privacy policy is not true. 03:17 rather than 03:00
+# because every cron in the world runs on the hour.
+[triggers]
+crons = ["17 3 * * *"]
 
 # Static assets (CSS, client bundles, vendored pdf.js). The Worker handles
 # everything else. `run_worker_first` is left off: assets win for real files,
@@ -37,6 +49,22 @@ database_id = "b387d45c-68d8-4bdb-b90b-d6a843f84eea"
 ANON_LINK_TTL_DAYS = "7"
 MAX_UPLOAD_MB = "25"
 MAIL_FROM = "pdf.sy <hello@pdf.sy>"
+
+# Turnstile. The site key is public by design — it ships in the HTML — so it
+# belongs here rather than in a secret. Its partner does not:
+#
+#   npx wrangler secret put TURNSTILE_SECRET
+#
+# Without that secret the widget still renders but nothing is verified, which
+# is what lets a fresh clone run with no Cloudflare account. It also means a
+# deploy that forgets it is unprotected: check the Worker logs for
+# "turnstile: no TURNSTILE_SECRET set".
+TURNSTILE_SITE_KEY = "0x4AAAAAAEZr2gYqpkziK-NN"
+
+# Optional allowlist of hostnames a token may be issued for, comma-separated.
+# Unset, the host the request arrived on is used, which keeps *.workers.dev and
+# localhost working. Pin it once pdf.sy is the only hostname serving this.
+# TURNSTILE_HOSTNAMES = "pdf.sy,www.pdf.sy"
 
 # RESEND_API_KEY is a secret, not a var:
 #   npx wrangler secret put RESEND_API_KEY

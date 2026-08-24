@@ -37,7 +37,7 @@ export const LinkSettings = ({ link, token, user, refused, updatedVersion, error
       )}
       {error && (
         <p class="mt-3 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error === "too_large" ? "That file is too large." : "That file is not a PDF."}
+          {uploadError(error)}
         </p>
       )}
 
@@ -152,6 +152,25 @@ const LockBadge = () => (
     Pro
   </a>
 );
+
+/**
+ * Why a replacement upload was refused. The codes come from lib/pdf.ts, and
+ * saying which rule the file broke is worth the extra strings — "that file is
+ * not a PDF" for a file that plainly is one reads as a broken uploader.
+ */
+function uploadError(code: string): string {
+  const messages: Record<string, string> = {
+    too_large: "That file is too large.",
+    not_a_pdf: "That file is not a valid PDF.",
+    truncated: "That PDF looks incomplete — it may not have finished uploading.",
+    active_content: "That PDF contains active content (script, media, or a launch action) and cannot be shared.",
+    embedded_file: "That PDF has another file attached inside it and cannot be shared.",
+    encrypted: "That PDF is password-protected. Remove its password first — you can set a link password here instead.",
+    blocked: "That file has been blocked.",
+    rate_limited: "Too many uploads just now. Wait a few minutes and try again.",
+  };
+  return messages[code] ?? "That file could not be accepted.";
+}
 
 function featureLabel(feature: string): string {
   const labels: Record<string, string> = {

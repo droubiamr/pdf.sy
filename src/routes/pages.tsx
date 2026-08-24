@@ -7,6 +7,7 @@ import { formatMs } from "../lib/format";
 import { siteUrl } from "../lib/urls";
 import { loadOwnedLink } from "./links";
 import { LinkSettings } from "../components/link-settings";
+import { Turnstile } from "../components/turnstile";
 import { can } from "../lib/plans";
 
 export const pages = new Hono<Env>();
@@ -214,6 +215,14 @@ pages.get("/new", (c) =>
             <input id="file" name="file" type="file" accept="application/pdf" class="sr-only" />
           </label>
 
+          {/* Solves on load, so the token is normally waiting before a file is
+              even chosen. `interaction-only` keeps it invisible unless someone
+              actually looks suspicious. */}
+          <Turnstile
+            id="turnstile-upload" action="upload" class="mt-4 flex justify-center"
+            siteKey={c.env.TURNSTILE_SITE_KEY}
+          />
+
           <div id="progress" class="mt-6 hidden">
             <div class="h-2 w-full overflow-hidden rounded-full bg-muted">
               <div id="bar" class="h-full w-0 rounded-full bg-primary transition-[width] duration-200"></div>
@@ -331,6 +340,13 @@ pages.get("/tools", (c) =>
             </div>
           </ToolPanel>
         </div>
+
+        {/* The tools themselves never upload, but "Share it as a tracked link"
+            posts to the same endpoint the upload page does. */}
+        <Turnstile
+          id="turnstile-tools" action="upload" class="mt-6 flex"
+          siteKey={c.env.TURNSTILE_SITE_KEY}
+        />
 
         <div class="mt-6 flex flex-wrap items-center gap-3">
           <button id="run" class="btn">Run</button>

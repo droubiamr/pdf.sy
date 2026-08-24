@@ -75,4 +75,10 @@ export type Bindings = {
   STRIPE_PRICE_BUSINESS?: string;
   ANON_LINK_TTL_DAYS: string;
   MAX_UPLOAD_MB: string;
+  /** Public, so it lives in wrangler.toml. Absent means the widget is off. */
+  TURNSTILE_SITE_KEY?: string;
+  /** `wrangler secret put TURNSTILE_SECRET`. Absent means checks are skipped. */
+  TURNSTILE_SECRET?: string;
+  /** Comma-separated allowlist. Falls back to the request's own host. */
+  TURNSTILE_HOSTNAMES?: string;
 };

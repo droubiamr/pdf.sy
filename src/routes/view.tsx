@@ -11,6 +11,7 @@ import { siteUrl } from "../lib/urls";
 import { resolveVersion } from "../lib/versions";
 import { verifyPassword, unlockToken } from "../lib/password";
 import { can } from "../lib/plans";
+import { hit, clientKey } from "../lib/limits";
 
 export const view = new Hono<Env>();
 
@@ -55,11 +56,30 @@ view.get("/:slug/qr.svg", async (c) => {
 
 view.post("/:slug/unlock", async (c) => {
   const slug = c.req.param("slug");
+
+  // Two separate reasons to limit this, and the second is the one that bites.
+  //
+  // The obvious one is guessing: a document password is short and human-chosen,
+  // and nothing else here stands between a guess and the file.
+  //
+  // The other is that verifying costs 100,000 PBKDF2 iterations of *our* CPU
+  // for one cheap request from the caller. Unlimited, that is the least
+  // expensive way to exhaust a Worker's CPU budget on this whole site.
+  //
+  // Keyed per caller AND per link, so one visitor fumbling their own password
+  // cannot lock a different document for everybody else.
+  const key = `${await clientKey(c, "unlock")}:${slug}`;
+  const verdict = await hit(c.env.DB, "unlock", key);
+  // Back to the password page rather than a bare 429 body. Whoever is on the
+  // other end of the tenth wrong password is usually a person who typed it
+  // wrong, not an attacker, and they still need to be told what happened.
+  if (!verdict.ok) return c.redirect(`/${slug}?throttled=1`, 303);
+
   const link = await loadLink(c.env.DB, slug);
   if (!link?.password_hash) return c.redirect(`/${slug}`, 303);
 
   const form = await c.req.formData();
-  const password = String(form.get("password") ?? "");
+  const password = String(form.get("password") ?? "").slice(0, 256);
 
   if (!(await verifyPassword(password, link.password_hash))) {
     return c.redirect(`/${slug}?wrong=1`, 303);
@@ -140,6 +160,8 @@ view.get("/:slug", async (c) => {
 
   if (!(await isUnlocked(c, link))) {
     const wrong = c.req.query("wrong") === "1";
+    const throttled = c.req.query("throttled") === "1";
+
     return c.html(
       <Layout title={`Password required — pdf.sy`} user={c.get("user")} noindex>
         <section class="mx-auto w-full max-w-sm px-5 py-24">
@@ -154,15 +176,21 @@ view.get("/:slug", async (c) => {
               <input
                 type="password" name="password" required autofocus
                 autocomplete="current-password" placeholder="Password" class="input"
-                aria-invalid={wrong ? "true" : undefined}
+                aria-invalid={wrong || throttled ? "true" : undefined}
+                disabled={throttled}
               />
               {wrong && <p class="text-sm text-destructive">That password is not right.</p>}
-              <button type="submit" class="btn">Open document</button>
+              {throttled && (
+                <p class="text-sm text-destructive">
+                  Too many attempts from here. Wait a few minutes, then try again.
+                </p>
+              )}
+              <button type="submit" class="btn" disabled={throttled}>Open document</button>
             </form>
           </div>
         </section>
       </Layout>,
-      wrong ? 401 : 200,
+      throttled ? 429 : wrong ? 401 : 200,
     );
   }
 

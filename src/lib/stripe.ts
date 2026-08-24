@@ -1,6 +1,7 @@
 // Stripe over plain REST. The Node SDK assumes Node crypto and http, neither of
 // which a Worker has; the three calls we need are shorter than the shim.
 import type { Bindings } from "../db/schema";
+import { timingSafeEqual } from "./ids";
 
 const API = "https://api.stripe.com/v1";
 
@@ -84,13 +85,6 @@ export async function verifyWebhook(
   const expected = [...new Uint8Array(signature)].map((b) => b.toString(16).padStart(2, "0")).join("");
 
   return timingSafeEqual(expected, parts.v1);
-}
-
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
 }
 
 export type StripeEvent = {

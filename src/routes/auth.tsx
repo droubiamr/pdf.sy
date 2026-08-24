@@ -6,6 +6,9 @@ import {
 } from "../lib/auth";
 import { send, magicLinkEmail } from "../lib/mail";
 import { siteUrl } from "../lib/urls";
+import { hitByClient } from "../lib/limits";
+import { verify as verifyTurnstile, tokenFrom } from "../lib/turnstile";
+import { Turnstile } from "../components/turnstile";
 
 export const auth = new Hono<Env>();
 
@@ -39,6 +42,9 @@ auth.get("/login", async (c) => {
                 id="email" name="email" type="email" required autofocus
                 autocomplete="email" placeholder="you@company.com" class="input"
               />
+              {/* A plain form, so the browser submits the token itself — no
+                  client code needed here, unlike the upload pages. */}
+              <Turnstile action="login" siteKey={c.env.TURNSTILE_SITE_KEY} />
               <button type="submit" class="btn mt-1">Email me a link</button>
             </form>
             <p class="mt-6 text-sm text-muted-foreground">
@@ -54,11 +60,27 @@ auth.get("/login", async (c) => {
 
 auth.post("/api/auth/magic-link", async (c) => {
   const form = await c.req.formData();
-  const email = normalizeEmail(String(form.get("email") ?? ""));
+  const email = normalizeEmail(String(form.get("email") ?? "").slice(0, 320));
+
+  // The per-address limit in lib/auth.ts stops one inbox being flooded. It does
+  // nothing about the opposite shape of the same abuse: one caller asking for
+  // links to ten thousand *different* addresses, which turns this form into a
+  // mailer aimed at people who have never used the site — on our sending
+  // reputation and our Resend bill. That needs a per-caller limit, here.
+  const verdict = await hitByClient(c, "magicLink");
+
+  // Turnstile is the better instrument for this than the rate limit above: it
+  // asks whether there is a person here rather than how many requests this
+  // address has made, so it does not punish an office or a mobile network
+  // sharing one IP. Checked here rather than earlier so a failure is as silent
+  // as every other refusal on this route.
+  const human = await verifyTurnstile(c, tokenFrom(form), "login");
 
   // Deliberately vague and always the same response: this endpoint must not
   // reveal which addresses have accounts, and must not stall on the mail API.
-  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+  // A refusal is silent for the same reason — telling a caller they have been
+  // limited also tells them the limit exists and where it sits.
+  if (human && verdict.ok && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     const token = await createMagicLink(c.env.DB, email);
     if (token) {
       const url = new URL(`/auth/verify?token=${encodeURIComponent(token)}`, siteUrl(c)).toString();
@@ -114,6 +136,8 @@ auth.post("/api/claim", async (c) => {
 
   let claimed = 0;
   for (const item of items) {
+    if (typeof item?.slug !== "string" || typeof item?.token !== "string") continue;
+
     const result = await c.env.DB.prepare(
       `UPDATE documents
           SET owner_id = ?
@@ -121,15 +145,20 @@ auth.post("/api/claim", async (c) => {
           AND owner_id IS NULL
           AND id = (SELECT document_id FROM links WHERE slug = ?)`,
     ).bind(user.id, item.token, item.slug).run();
-    if (result.meta.changes > 0) claimed++;
-  }
 
-  // Claimed documents belong to an account now, so their links stop expiring.
-  if (claimed > 0) {
+    if (result.meta.changes === 0) continue;
+    claimed++;
+
+    // Only this link stops expiring.
+    //
+    // This used to clear expires_at across every link the account owned, so
+    // claiming one anonymous upload silently wiped deliberate expiry dates on
+    // everything else — including dates set through the paid expiry feature,
+    // which is a security control the owner chose and paid for. Scoping it to
+    // the slug just claimed is the whole fix.
     await c.env.DB.prepare(
-      `UPDATE links SET expires_at = NULL
-        WHERE document_id IN (SELECT id FROM documents WHERE owner_id = ?)`,
-    ).bind(user.id).run();
+      `UPDATE links SET expires_at = NULL WHERE slug = ?`,
+    ).bind(item.slug).run();
   }
 
   return c.json({ claimed });

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "../lib/context";
 import { Layout } from "../components/layout";
 import { newId } from "../lib/ids";
+import { hitByClient } from "../lib/limits";
 
 export const legal = new Hono<Env>();
 
@@ -351,12 +352,18 @@ legal.get("/report", (c) => {
 });
 
 legal.post("/report", async (c) => {
+  // The queue behind this is read by a person, so flooding it is an attack on
+  // the response process itself — bury the real reports and nothing gets taken
+  // down. Answered identically either way, so a flooder learns nothing.
+  const verdict = await hitByClient(c, "report");
+
   const form = await c.req.formData();
   const slug = slugFrom(String(form.get("link") ?? ""));
   const reason = String(form.get("reason") ?? "").trim();
-  const email = String(form.get("email") ?? "").trim() || null;
+  const email = String(form.get("email") ?? "").trim().slice(0, 320) || null;
 
   if (!slug || !reason) return c.redirect("/report?error=1", 303);
+  if (!verdict.ok) return c.redirect("/report?sent=1", 303);
 
   await c.env.DB.prepare(
     `INSERT INTO abuse_reports (id, slug, reason, reporter_email, status, created_at)
