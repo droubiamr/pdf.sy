@@ -12,6 +12,7 @@ import { resolveVersion } from "../lib/versions";
 import { verifyPassword, unlockToken } from "../lib/password";
 import { can } from "../lib/plans";
 import { hit, clientKey } from "../lib/limits";
+import { t } from "../lib/i18n";
 
 export const view = new Hono<Env>();
 
@@ -102,23 +103,24 @@ view.post("/:slug/unlock", async (c) => {
  * revocation, expiry, download-blocking and passwords possible at all.
  */
 view.get("/v/:slug/file", async (c) => {
+  const s = t(c);
   const slug = c.req.param("slug");
   const link = await loadLink(c.env.DB, slug);
-  if (!link) return c.text("This link is no longer available.", 404);
+  if (!link) return c.text(s.viewer.gone, 404);
 
   // The gate has to be here too, not only on the viewer page — otherwise the
   // password protects the wrapper and the document leaks.
-  if (!(await isUnlocked(c, link))) return c.text("This document is password protected.", 403);
+  if (!(await isUnlocked(c, link))) return c.text(s.viewer.locked, 403);
 
   const version = await resolveVersion(c.env.DB, link);
-  if (!version) return c.text("Not found.", 404);
+  if (!version) return c.text(s.viewer.notFound, 404);
 
   const object = await c.env.FILES.get(version.r2_key);
-  if (!object) return c.text("Not found.", 404);
+  if (!object) return c.text(s.viewer.notFound, 404);
 
   const download = c.req.query("download") === "1";
   if (download && link.allow_download !== 1) {
-    return c.text("Downloads are disabled for this link.", 403);
+    return c.text(s.viewer.downloadsOff, 403);
   }
 
   return new Response(object.body, {
@@ -138,18 +140,17 @@ view.get("/v/:slug/file", async (c) => {
 /* -------------------------------- viewer --------------------------------- */
 
 view.get("/:slug", async (c) => {
+  const s = t(c);
   const slug = c.req.param("slug");
   const context = await loadContext(c.env.DB, slug);
 
   if (!context) {
     return c.html(
-      <Layout title="Link unavailable — pdf.sy" user={c.get("user")} noindex>
+      <Layout c={c} title={s.viewer.unavailableTitle} noindex>
         <section class="mx-auto w-full max-w-lg px-5 py-24 text-center">
-          <h1 class="text-2xl font-semibold tracking-tight">This link is no longer available</h1>
-          <p class="mt-2 text-muted-foreground">
-            It may have expired, been revoked by its owner, or never existed.
-          </p>
-          <a href="/new" class="btn mt-6">Share a PDF of your own</a>
+          <h1 class="text-2xl font-semibold tracking-tight">{s.viewer.unavailableH1}</h1>
+          <p class="mt-2 text-muted-foreground">{s.viewer.unavailableBody}</p>
+          <a href="/new" class="btn mt-6">{s.viewer.shareOwn}</a>
         </section>
       </Layout>,
       404,
@@ -163,29 +164,26 @@ view.get("/:slug", async (c) => {
     const throttled = c.req.query("throttled") === "1";
 
     return c.html(
-      <Layout title={`Password required — pdf.sy`} user={c.get("user")} noindex>
+      <Layout c={c} title={s.viewer.passwordTitle} noindex>
         <section class="mx-auto w-full max-w-sm px-5 py-24">
           <div class="card rounded-xl border border-border bg-card p-6">
             <header class="mb-4">
-              <h1 class="card-title text-lg font-semibold">This document is protected</h1>
-              <p class="mt-1 text-sm text-muted-foreground">
-                Enter the password the sender gave you.
-              </p>
+              <h1 class="card-title text-lg font-semibold">{s.viewer.protectedH1}</h1>
+              <p class="mt-1 text-sm text-muted-foreground">{s.viewer.protectedBody}</p>
             </header>
             <form method="post" action={`/${slug}/unlock`} class="flex flex-col gap-3">
+              {/* A password is typed exactly as the sender wrote it, so the
+                  field runs left-to-right whichever way the page does. */}
               <input
                 type="password" name="password" required autofocus
-                autocomplete="current-password" placeholder="Password" class="input"
+                autocomplete="current-password" placeholder={s.viewer.passwordPlaceholder}
+                dir="ltr" class="input"
                 aria-invalid={wrong || throttled ? "true" : undefined}
                 disabled={throttled}
               />
-              {wrong && <p class="text-sm text-destructive">That password is not right.</p>}
-              {throttled && (
-                <p class="text-sm text-destructive">
-                  Too many attempts from here. Wait a few minutes, then try again.
-                </p>
-              )}
-              <button type="submit" class="btn" disabled={throttled}>Open document</button>
+              {wrong && <p class="text-sm text-destructive">{s.viewer.wrong}</p>}
+              {throttled && <p class="text-sm text-destructive">{s.viewer.throttled}</p>}
+              <button type="submit" class="btn" disabled={throttled}>{s.viewer.open}</button>
             </form>
           </div>
         </section>
@@ -197,32 +195,35 @@ view.get("/:slug", async (c) => {
   const hideBadge = can({ plan: ownerPlan }, "hide_badge");
 
   return c.html(
-    <Layout title={`${title} — pdf.sy`} script="/assets/viewer.js" bare noindex>
+    <Layout c={c} title={`${title} — pdf.sy`} script="/assets/viewer.js" bare noindex>
       <div class="flex min-h-dvh flex-col bg-muted/40" data-slug={slug}>
         <header class="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-border bg-card/90 px-4 backdrop-blur">
           <FileText class="size-4 shrink-0 text-primary" />
           <span class="truncate text-sm font-medium">{title}</span>
-          <span id="page-indicator" class="tnum ml-auto shrink-0 text-sm text-muted-foreground">—</span>
+          {/* "3 / 12" is a left-to-right figure; `ltr` keeps the two numbers
+              either side of the slash in the order they were written. */}
+          <span id="page-indicator" dir="ltr" class="tnum ms-auto shrink-0 text-sm text-muted-foreground">—</span>
           {link.allow_download === 1 && (
             <a id="download" class="btn shrink-0" data-variant="outline" data-size="sm"
                href={`/v/${slug}/file?download=1`} download>
-              <Download /> <span class="hidden sm:inline">Download</span>
+              <Download /> <span class="hidden sm:inline">{s.viewer.download}</span>
             </a>
           )}
         </header>
 
         <div id="pages" class="mx-auto flex w-full max-w-4xl flex-col items-center gap-4 px-3 py-6">
-          <div id="viewer-loading" class="py-24 text-sm text-muted-foreground">Loading document…</div>
+          <div id="viewer-loading" class="py-24 text-sm text-muted-foreground">{s.viewer.loading}</div>
         </div>
 
         <footer class="mt-auto border-t border-border bg-card px-4 py-3 text-center text-xs text-muted-foreground">
           {!hideBadge && (
             <>
-              Shared with <a href="/" class="font-medium text-foreground hover:underline">pdf.sy</a>
+              {s.viewer.sharedWith}{" "}
+              <a href="/" class="font-medium text-foreground hover:underline">pdf.sy</a>
               <span class="px-1.5">·</span>
             </>
           )}
-          <a href={`/report?slug=${slug}`} class="hover:underline">Report this file</a>
+          <a href={`/report?slug=${slug}`} class="hover:underline">{s.viewer.reportFile}</a>
         </footer>
       </div>
     </Layout>,

@@ -9,6 +9,7 @@ import { siteUrl } from "../lib/urls";
 import { hitByClient } from "../lib/limits";
 import { verify as verifyTurnstile, tokenFrom } from "../lib/turnstile";
 import { Turnstile } from "../components/turnstile";
+import { t } from "../lib/i18n";
 
 export const auth = new Hono<Env>();
 
@@ -16,48 +17,42 @@ export const auth = new Hono<Env>();
 
 auth.get("/login", async (c) => {
   if (c.get("user")) return c.redirect("/dashboard");
+  const s = t(c);
   const sent = c.req.query("sent") === "1";
   const unverified = c.req.query("verify") === "1";
 
   return c.html(
-    <Layout title="Sign in — pdf.sy" noindex>
+    <Layout c={c} title={s.auth.title} noindex>
       <section class="mx-auto w-full max-w-md px-5 py-20">
         {sent ? (
           <div class="card rounded-xl border border-border bg-card p-6 text-center">
             <div class="mx-auto mb-4 flex size-11 items-center justify-center rounded-full bg-accent text-accent-foreground">✓</div>
-            <h1 class="text-xl font-semibold tracking-tight">Check your email</h1>
-            <p class="mt-2 text-sm text-muted-foreground">
-              If that address has an inbox we can reach, a sign-in link is on its way.
-              It works once and expires in 15 minutes.
-            </p>
+            <h1 class="text-xl font-semibold tracking-tight">{s.auth.sentH1}</h1>
+            <p class="mt-2 text-sm text-muted-foreground">{s.auth.sentBody}</p>
           </div>
         ) : (
           <>
-            <h1 class="text-3xl font-semibold tracking-tight">Sign in</h1>
-            <p class="mt-2 text-muted-foreground">
-              No password. We email you a link that signs you straight in.
-            </p>
+            <h1 class="text-3xl font-semibold tracking-tight">{s.auth.h1}</h1>
+            <p class="mt-2 text-muted-foreground">{s.auth.lead}</p>
             {unverified && (
               <p class="mt-6 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                No link was sent — the human check below was not completed. Tick
-                it, then press the button again.
+                {s.auth.unverified}
               </p>
             )}
             <form method="post" action="/api/auth/magic-link" class="mt-8 flex flex-col gap-3">
-              <label for="email" class="label text-sm font-medium">Email</label>
+              <label for="email" class="label text-sm font-medium">{s.auth.emailLabel}</label>
+              {/* An address is always a Latin, left-to-right string, whichever
+                  way the page around it runs. */}
               <input
                 id="email" name="email" type="email" required autofocus
-                autocomplete="email" placeholder="you@company.com" class="input"
+                autocomplete="email" placeholder={s.auth.emailPlaceholder} dir="ltr" class="input"
               />
               {/* A plain form, so the browser submits the token itself — no
                   client code needed here, unlike the upload pages. */}
               <Turnstile action="login" siteKey={c.env.TURNSTILE_SITE_KEY} />
-              <button type="submit" class="btn mt-1">Email me a link</button>
+              <button type="submit" class="btn mt-1">{s.auth.submit}</button>
             </form>
-            <p class="mt-6 text-sm text-muted-foreground">
-              Signing in also claims any links you created on this device, so they
-              stop expiring.
-            </p>
+            <p class="mt-6 text-sm text-muted-foreground">{s.auth.claimNote}</p>
           </>
         )}
       </section>
@@ -101,7 +96,9 @@ auth.post("/api/auth/magic-link", async (c) => {
     const token = await createMagicLink(c.env.DB, email);
     if (token) {
       const url = new URL(`/auth/verify?token=${encodeURIComponent(token)}`, siteUrl(c)).toString();
-      c.executionCtx.waitUntil(send(c.env, { to: email, ...magicLinkEmail(url) }));
+      // Written in the language they are reading the site in. This is the one
+      // email we can be sure about: it is a reply to a form they just submitted.
+      c.executionCtx.waitUntil(send(c.env, { to: email, ...magicLinkEmail(url, c.get("lang")) }));
     }
   }
 
@@ -113,14 +110,13 @@ auth.get("/auth/verify", async (c) => {
   const email = token ? await consumeMagicLink(c.env.DB, token) : null;
 
   if (!email) {
+    const s = t(c);
     return c.html(
-      <Layout title="Link expired — pdf.sy" noindex>
+      <Layout c={c} title={s.auth.expiredTitle} noindex>
         <section class="mx-auto w-full max-w-md px-5 py-20 text-center">
-          <h1 class="text-2xl font-semibold tracking-tight">That link no longer works</h1>
-          <p class="mt-2 text-muted-foreground">
-            Sign-in links expire after 15 minutes and can only be used once.
-          </p>
-          <a href="/login" class="btn mt-6">Send me a new one</a>
+          <h1 class="text-2xl font-semibold tracking-tight">{s.auth.expiredH1}</h1>
+          <p class="mt-2 text-muted-foreground">{s.auth.expiredBody}</p>
+          <a href="/login" class="btn mt-6">{s.auth.sendNew}</a>
         </section>
       </Layout>,
       410,

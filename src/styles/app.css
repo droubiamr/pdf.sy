@@ -1,5 +1,10 @@
 @import "tailwindcss";
 @import "basecoat-css";
+/* Written by scripts/build.mjs straight from the @fontsource package, and
+   inlined into the built stylesheet by the Tailwind CLI — so the self-hosted
+   faces cost no extra request. Run `npm run build` if your editor says this
+   file is missing. */
+@import "./fonts.generated.css";
 
 @source "../**/*.tsx";
 @source "../**/*.ts";
@@ -83,6 +88,12 @@
 
 @theme inline {
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* IBM Plex Sans Arabic carries a full Latin set of its own, and it is the
+     Latin companion the Arabic was drawn against. Listing it first means the
+     Latin fragments scattered through an Arabic page — pdf.sy, PDF, QR, $3 —
+     come from the same family as the Arabic around them rather than clashing
+     with a second typeface mid-sentence. */
+  --font-arabic: "IBM Plex Sans Arabic", "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
 @layer base {
@@ -90,10 +101,19 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
   }
+
+  /* Keyed off the language rather than the direction, and set on <html> so it
+     cascades to everything including form controls. `:lang()` also does the
+     right thing for an Arabic phrase marked up inside an English page. */
+  html:lang(ar) {
+    font-family: var(--font-arabic);
+  }
+
   body {
     background-color: var(--background);
     color: var(--foreground);
   }
+
   /* Anywhere a number is compared against another number, line the digits up. */
   .tnum { font-variant-numeric: tabular-nums; }
 }

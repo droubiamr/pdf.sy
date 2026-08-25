@@ -3,6 +3,7 @@
 // we can make on the marketing page without an asterisk.
 import { PDFDocument, degrees } from "pdf-lib";
 import { TOKEN_FIELD, turnstileToken, resetTurnstile } from "./turnstile";
+import { t } from "./i18n";
 
 const TURNSTILE = "#turnstile-tools";
 
@@ -64,7 +65,7 @@ async function bytesOf(file: File) {
 
 async function merge() {
   const files = [...((document.getElementById("merge-files") as HTMLInputElement).files ?? [])];
-  if (files.length < 2) throw new Error("Choose at least two PDFs to merge.");
+  if (files.length < 2) throw new Error(t("chooseTwo"));
 
   const out = await PDFDocument.create();
   for (const file of files) {
@@ -72,47 +73,47 @@ async function merge() {
     const copied = await out.copyPages(src, src.getPageIndices());
     for (const page of copied) out.addPage(page);
   }
-  finish(await out.save(), `Merged ${files.length} files into ${out.getPageCount()} pages.`);
+  finish(await out.save(), t("merged", { files: files.length, pages: out.getPageCount() }));
 }
 
 async function split() {
   const file = (document.getElementById("split-file") as HTMLInputElement).files?.[0];
-  if (!file) throw new Error("Choose a PDF to split.");
+  if (!file) throw new Error(t("chooseSplit"));
 
   const src = await PDFDocument.load(await bytesOf(file));
   const total = src.getPageCount();
   const from = Math.max(1, Number((document.getElementById("split-from") as HTMLInputElement).value || 1));
   const to = Math.min(total, Number((document.getElementById("split-to") as HTMLInputElement).value || total));
-  if (from > to) throw new Error("The first page must come before the last.");
+  if (from > to) throw new Error(t("orderWrong"));
 
   const out = await PDFDocument.create();
   const indices = Array.from({ length: to - from + 1 }, (_, i) => from - 1 + i);
   for (const page of await out.copyPages(src, indices)) out.addPage(page);
-  finish(await out.save(), `Kept pages ${from}–${to} of ${total}.`);
+  finish(await out.save(), t("kept", { from, to, total }));
 }
 
 async function rotate() {
   const file = (document.getElementById("rotate-file") as HTMLInputElement).files?.[0];
-  if (!file) throw new Error("Choose a PDF to rotate.");
+  if (!file) throw new Error(t("chooseRotate"));
 
   const angle = Number((document.querySelector<HTMLSelectElement>("#rotate-angle")!).value);
   const doc = await PDFDocument.load(await bytesOf(file));
   for (const page of doc.getPages()) {
     page.setRotation(degrees((page.getRotation().angle + angle) % 360));
   }
-  finish(await doc.save(), `Rotated ${doc.getPageCount()} pages by ${angle}°.`);
+  finish(await doc.save(), t("rotated", { pages: doc.getPageCount(), angle }));
 }
 
 runButton?.addEventListener("click", async () => {
   reset();
   runButton.disabled = true;
-  status.textContent = "Working…";
+  status.textContent = t("working");
   try {
     if (active === "merge") await merge();
     else if (active === "split") await split();
     else await rotate();
   } catch (error) {
-    status.textContent = error instanceof Error ? error.message : "That file could not be processed.";
+    status.textContent = error instanceof Error ? error.message : t("processFailed");
   } finally {
     runButton.disabled = false;
   }
@@ -122,18 +123,18 @@ runButton?.addEventListener("click", async () => {
 shareButton?.addEventListener("click", async () => {
   if (!output) return;
   shareButton.disabled = true;
-  status.textContent = "Creating your link…";
+  status.textContent = t("creatingLink");
 
   const body = new FormData();
   body.set("file", new File([output], "pdfsy-output.pdf", { type: "application/pdf" }));
-  body.set("title", "Edited document");
+  body.set("title", t("editedTitle"));
 
   // This posts to the same guarded endpoint as the upload page, so it needs the
   // same token. Easy to miss: the two flows share a server route but not a
   // client, and protecting only one of them silently breaks the other.
   const token = await turnstileToken(TURNSTILE);
   if (token === null && document.querySelector(TURNSTILE)) {
-    status.textContent = "Could not verify your browser. Reload the page and try again.";
+    status.textContent = t("verifyFailed");
     shareButton.disabled = false;
     return;
   }
@@ -143,7 +144,7 @@ shareButton?.addEventListener("click", async () => {
   resetTurnstile(TURNSTILE);
 
   if (!response.ok) {
-    status.textContent = "The link could not be created. Download the file instead.";
+    status.textContent = t("linkFailed");
     shareButton.disabled = false;
     return;
   }

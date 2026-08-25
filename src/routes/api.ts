@@ -5,6 +5,7 @@ import { newId, newManageToken, newSlug, sha256Hex, hashIp, RESERVED_SLUGS } fro
 import { send, openNotificationEmail } from "../lib/mail";
 import { formatMs } from "../lib/format";
 import { siteUrl } from "../lib/urls";
+import { t, uploadErrorMessage } from "../lib/i18n";
 import { resolveVersion } from "../lib/versions";
 import { inspectPdf } from "../lib/pdf";
 import { activeLinkLimit } from "../lib/plans";
@@ -41,16 +42,16 @@ api.post("/documents", async (c) => {
   }
 
   const burst = await hitByClient(c, "uploadBurst");
-  if (!burst.ok) return tooMany(c, burst, "Too many uploads just now. Try again shortly.", "json");
+  if (!burst.ok) return tooMany(c, burst, t(c).errors.uploadBurst, "json");
 
   const daily = await hitByClient(c, "upload");
   if (!daily.ok) {
-    return tooMany(c, daily, "You have reached today's upload limit. Sign in for a higher one.", "json");
+    return tooMany(c, daily, t(c).errors.uploadDaily, "json");
   }
 
   const uploaderHash = await clientKey(c, "uploader");
   if (await isBlockedUploader(c.env.DB, uploaderHash)) {
-    return c.json({ error: "Uploads from here have been blocked." }, 403);
+    return c.json({ error: t(c).errors.uploadBlocked }, 403);
   }
 
   // A free account is capped on how many links it can hold at once. This was
@@ -76,12 +77,12 @@ api.post("/documents", async (c) => {
   // is read into memory, hashed, inspected and written to R2 — everything
   // costly is downstream of this line.
   if (!(await verifyTurnstile(c, tokenFrom(form), "upload"))) {
-    return c.json({ error: "Could not verify your browser. Reload the page and try again." }, 403);
+    return c.json({ error: t(c).errors.notHuman }, 403);
   }
 
-  if (!(file instanceof File)) return c.json({ error: "No file was sent." }, 400);
+  if (!(file instanceof File)) return c.json({ error: t(c).errors.noFile }, 400);
   if (file.size > maxBytes) {
-    return c.json({ error: `That file is larger than ${c.env.MAX_UPLOAD_MB} MB.` }, 413);
+    return c.json({ error: t(c).errors.tooLargeMb(String(c.env.MAX_UPLOAD_MB ?? 25)) }, 413);
   }
 
   const bytes = await file.arrayBuffer();
@@ -92,7 +93,9 @@ api.post("/documents", async (c) => {
   const verdict = await inspectPdf(bytes);
   if (!verdict.ok) {
     console.warn("upload refused", verdict.code, uploaderHash);
-    return c.json({ error: verdict.message, code: verdict.code }, 415);
+    // `verdict.message` from lib/pdf.ts stays in the log above; the caller gets
+    // the same refusal in their own language.
+    return c.json({ error: uploadErrorMessage(t(c), verdict.code), code: verdict.code }, 415);
   }
   if (verdict.warnings.length > 0) {
     console.log("upload accepted with active-content markers", verdict.warnings.join(","));
@@ -102,14 +105,14 @@ api.post("/documents", async (c) => {
   const blocked = await c.env.DB.prepare(`SELECT sha256 FROM blocked_hashes WHERE sha256 = ?`)
     .bind(sha256)
     .first();
-  if (blocked) return c.json({ error: "This file has been blocked." }, 451);
+  if (blocked) return c.json({ error: t(c).errors.fileBlocked }, 451);
 
   const now = Date.now();
   const docId = newId();
   const versionId = newId();
   const manageToken = newManageToken();
   const r2Key = `docs/${docId}/v1.pdf`;
-  const title = (form.get("title") as string | null)?.trim() || file.name.replace(/\.pdf$/i, "") || "Untitled";
+  const title = (form.get("title") as string | null)?.trim() || file.name.replace(/\.pdf$/i, "") || t(c).errors.untitled;
   const pageCount = Number(form.get("pageCount") ?? 0) || null;
 
   // Claim a free slug before writing anything. Previously the loop could fall
@@ -118,7 +121,7 @@ api.post("/documents", async (c) => {
   const slug = await claimSlug(c.env.DB);
   if (!slug) {
     console.error("could not find a free slug in 8 attempts");
-    return c.json({ error: "Could not create a link just now. Please try again." }, 503);
+    return c.json({ error: t(c).errors.linkFailed }, 503);
   }
 
   await c.env.FILES.put(r2Key, bytes, {
@@ -151,7 +154,7 @@ api.post("/documents", async (c) => {
     // that no code path can reach.
     console.error("upload metadata write failed, removing orphaned object", error);
     c.executionCtx.waitUntil(c.env.FILES.delete(r2Key).catch(() => {}));
-    return c.json({ error: "Could not save that upload. Please try again." }, 500);
+    return c.json({ error: t(c).errors.saveFailed }, 500);
   }
 
   return c.json({
@@ -181,7 +184,7 @@ api.post("/v/:slug/session", async (c) => {
   const slug = c.req.param("slug");
 
   const verdict = await hitByClient(c, "viewSession");
-  if (!verdict.ok) return tooMany(c, verdict, "Too many requests.", "json");
+  if (!verdict.ok) return tooMany(c, verdict, t(c).errors.tooManyRequests, "json");
 
   const link = await loadLink(c.env.DB, slug);
   if (!link) return c.json({ error: "not_found" }, 404);
@@ -218,7 +221,7 @@ api.post("/v/:slug/ping", async (c) => {
   const slug = c.req.param("slug");
 
   const verdict = await hitByClient(c, "ping");
-  if (!verdict.ok) return tooMany(c, verdict, "Too many requests.", "json");
+  if (!verdict.ok) return tooMany(c, verdict, t(c).errors.tooManyRequests, "json");
 
   const body = await c.req.json<{
     sessionId: string;
@@ -352,7 +355,7 @@ async function maybeNotifyOwner(env: Bindings, origin: string, slug: string, ses
 
 api.post("/report/:slug", async (c) => {
   const verdict = await hitByClient(c, "report");
-  if (!verdict.ok) return tooMany(c, verdict, "Too many reports from here. Try again later.", "json");
+  if (!verdict.ok) return tooMany(c, verdict, t(c).errors.tooManyReports, "json");
 
   type ReportBody = { reason?: string; email?: string };
   const body: ReportBody = await c.req.json<ReportBody>().catch(() => ({}) as ReportBody);

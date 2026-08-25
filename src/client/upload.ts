@@ -2,6 +2,7 @@
 // upload progress and a progress bar is the difference between "is it stuck?"
 // and "it's working".
 import { TOKEN_FIELD, turnstileToken, resetTurnstile } from "./turnstile";
+import { t } from "./i18n";
 
 const TURNSTILE = "#turnstile-upload";
 
@@ -60,13 +61,13 @@ async function upload(file: File) {
   // The challenge usually finishes long before a file is chosen, but a drop
   // within the first moment of the page can beat it. Say what is happening
   // rather than showing a stalled progress bar.
-  progressLabel.textContent = "Checking your browser…";
+  progressLabel.textContent = t("checkingBrowser");
   const token = await turnstileToken(TURNSTILE);
   if (token === null && document.querySelector(TURNSTILE)) {
-    return fail("Could not verify your browser. Reload the page and try again.");
+    return fail(t("verifyFailed"));
   }
 
-  progressLabel.textContent = `Uploading ${file.name}…`;
+  progressLabel.textContent = t("uploadingFile", { name: file.name });
 
   const body = new FormData();
   body.set("file", file);
@@ -80,10 +81,10 @@ async function upload(file: File) {
     if (!e.lengthComputable) return;
     const pct = Math.round((e.loaded / e.total) * 100);
     bar.style.width = `${pct}%`;
-    progressLabel.textContent = pct < 100 ? `Uploading… ${pct}%` : "Finishing up…";
+    progressLabel.textContent = pct < 100 ? t("uploadingPct", { pct }) : t("finishing");
   });
 
-  xhr.addEventListener("error", () => fail("The upload failed. Check your connection and try again."));
+  xhr.addEventListener("error", () => fail(t("uploadFailed")));
 
   xhr.addEventListener("load", () => {
     // A token is spent whether or not the upload succeeded, so the widget needs
@@ -91,7 +92,7 @@ async function upload(file: File) {
     resetTurnstile(TURNSTILE);
 
     if (xhr.status >= 400) {
-      let message = "Something went wrong. Try again.";
+      let message = t("uploadGeneric");
       try { message = JSON.parse(xhr.responseText).error ?? message; } catch { /* keep the default */ }
       return fail(message);
     }
@@ -127,6 +128,6 @@ document.getElementById("copy")?.addEventListener("click", async (e) => {
   const url = (document.getElementById("share-url") as HTMLInputElement).value;
   await navigator.clipboard.writeText(url);
   const original = button.innerHTML;
-  button.textContent = "Copied";
+  button.textContent = t("copied");
   setTimeout(() => { button.innerHTML = original; }, 1600);
 });

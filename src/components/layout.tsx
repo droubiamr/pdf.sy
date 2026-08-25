@@ -1,9 +1,12 @@
+import type { Context } from "hono";
 import type { Child } from "hono/jsx";
 import { FileText, Menu, Moon, Sun, X } from "./icons";
+import type { Env } from "../lib/context";
+import type { Strings } from "../lib/strings/en";
+import { clientJson, dirOf, switchHref, t, type Lang } from "../lib/i18n";
 
-/** Public launch. One constant, so the banner and the dialog cannot disagree. */
+/** Keys the "you have seen the beta notice" flag. Bump it to show it again. */
 const LAUNCH_DATE = "2026-09-09";
-const LAUNCH_LABEL = "9 September 2026";
 
 /* -------------------------------------------------------------------------- */
 /*  Inline scripts                                                             */
@@ -58,13 +61,6 @@ const BETA_JS = `(function(){
   var d = document.getElementById('beta-dialog');
   if (!d) return;
 
-  var days = Math.ceil((Date.parse('${LAUNCH_DATE}T00:00:00Z') - Date.now()) / 86400000);
-  if (days > 0) {
-    document.querySelectorAll('[data-beta-countdown]').forEach(function(el){
-      el.textContent = ' — ' + days + (days === 1 ? ' day' : ' days') + ' away';
-    });
-  }
-
   var seen;
   try { seen = localStorage.getItem(KEY); } catch (e) { seen = '1'; }
   if (!seen && typeof d.showModal === 'function') d.showModal();
@@ -111,6 +107,15 @@ export const INLINE_SCRIPTS: readonly string[] = [THEME_JS, BETA_JS, MENU_JS];
 type SessionUser = { email: string } | null | undefined;
 
 type Props = {
+  /**
+   * The request itself.
+   *
+   * The layout needs three things off it — the language, the signed-in user,
+   * and the current path for the language switch — and all three were already
+   * being threaded through by hand. Taking the context instead means a new
+   * page physically cannot forget one of them.
+   */
+  c: Context<Env>;
   title: string;
   description?: string;
   children?: Child;
@@ -125,129 +130,136 @@ type Props = {
    * be the single worst thing this product could do to a customer.
    */
   noindex?: boolean;
-  /** Resolved by middleware; undefined on pages that never look. */
-  user?: SessionUser;
 };
 
-export const Layout = ({ title, description, children, script, bare, noindex, user }: Props) => (
-  <html lang="en">
-    <head>
-      <meta charset="utf-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1" />
-      <title>{title}</title>
-      {noindex && <meta name="robots" content="noindex, nofollow" />}
-      {description && <meta name="description" content={description} />}
-      <meta property="og:title" content={title} />
-      {description && <meta property="og:description" content={description} />}
-      <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-      <link rel="preconnect" href="https://fonts.googleapis.com" />
-      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
-      <link
-        rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"
-      />
-      <link rel="stylesheet" href="/assets/app.css" />
-      <script dangerouslySetInnerHTML={{ __html: THEME_JS }} />
-      {script && <script type="module" src={script} defer />}
-    </head>
-    <body class="min-h-dvh flex flex-col">
-      {/* Deliberately not on `bare` pages: someone opening a document they were
-          sent is a guest, and interrupting them to explain our release schedule
-          would be about us rather than about them. */}
-      {!bare && <BetaBanner />}
-      {!bare && <SiteHeader user={user} />}
-      <main class="flex-1">{children}</main>
-      {!bare && <SiteFooter />}
-      {!bare && <BetaDialog />}
-    </body>
-  </html>
-);
+export const Layout = ({ c, title, description, children, script, bare, noindex }: Props) => {
+  const lang = c.get("lang");
+  const user = c.get("user");
+  const s = t(c);
+  const url = new URL(c.req.url);
+
+  return (
+    <html lang={lang} dir={dirOf(lang)}>
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>{title}</title>
+        {noindex && <meta name="robots" content="noindex, nofollow" />}
+        {description && <meta name="description" content={description} />}
+        <meta property="og:title" content={title} />
+        {description && <meta property="og:description" content={description} />}
+        <meta property="og:locale" content={lang === "ar" ? "ar_SY" : "en_GB"} />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+
+        {/* Only a Latin page needs Google's copy of Inter. IBM Plex Sans Arabic
+            is served from our own origin and carries both scripts, so an Arabic
+            page contacts no third party for its type at all. */}
+        {lang !== "ar" && (
+          <>
+            <link rel="preconnect" href="https://fonts.googleapis.com" />
+            <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+            <link
+              rel="stylesheet"
+              href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap"
+            />
+          </>
+        )}
+
+        {/* The one weight the first paint of an Arabic page cannot do without.
+            Without this the browser only discovers the font after parsing the
+            stylesheet, and the heading arrives in a fallback face first. */}
+        {lang === "ar" && (
+          <link
+            rel="preload"
+            as="font"
+            type="font/woff2"
+            crossorigin=""
+            href="/assets/fonts/plex-arabic-400.woff2"
+          />
+        )}
+
+        <link rel="stylesheet" href="/assets/app.css" />
+        <script dangerouslySetInnerHTML={{ __html: THEME_JS }} />
+        {script && <script type="module" src={script} defer />}
+      </head>
+      <body class="min-h-dvh flex flex-col">
+        {!bare && <SiteHeader s={s} user={user} lang={lang} path={url.pathname + url.search} />}
+        <main class="flex-1">{children}</main>
+        {!bare && <SiteFooter s={s} />}
+        {!bare && <BetaDialog s={s} />}
+
+        {/* Strings for whichever bundle this page asked for. A data block, not
+            a script — see clientJson() in lib/i18n.ts for why the strict CSP
+            has nothing to say about it. */}
+        {script && (
+          <script
+            type="application/json"
+            id="i18n"
+            dangerouslySetInnerHTML={{ __html: clientJson(lang) }}
+          />
+        )}
+      </body>
+    </html>
+  );
+};
 
 /* -------------------------------------------------------------------------- */
 /*  Beta notice                                                                */
 /* -------------------------------------------------------------------------- */
 
 /**
- * A strip that always shows, plus a dialog on the first visit only.
+ * Opened by the Beta badge in the header, and once by itself on a first visit.
  *
- * The dialog is the native <dialog> element with Basecoat's `.dialog` class
- * doing the styling, so the backdrop, transitions and Escape-to-close are all
- * the browser's own behaviour rather than something to maintain.
+ * The native <dialog> element with Basecoat's `.dialog` class doing the
+ * styling, so the backdrop, transitions and Escape-to-close are all the
+ * browser's own behaviour rather than something to maintain.
  */
-const BetaBanner = () => (
-  <div class="border-b border-accent-foreground/15 bg-accent text-accent-foreground">
-    <div class="mx-auto flex w-full max-w-5xl items-center gap-3 px-5 py-2 text-sm">
-      <span class="rounded-full bg-accent-foreground/10 px-2 py-0.5 text-xs font-semibold tracking-wide uppercase">
-        Beta
-      </span>
-      <p class="min-w-0">
-        <span class="font-medium">pdf.sy is still being built.</span>{" "}
-        <span class="hidden sm:inline">Full launch {LAUNCH_LABEL}.</span>
-      </p>
-      <button
-        type="button"
-        data-beta-open
-        class="ml-auto shrink-0 text-xs font-medium underline underline-offset-4 hover:opacity-80"
-      >
-        What works today?
-      </button>
-    </div>
-  </div>
-);
-
-const BetaDialog = () => (
+const BetaDialog = ({ s }: { s: Strings }) => (
   <>
     <dialog class="dialog w-full max-w-md" id="beta-dialog" aria-labelledby="beta-title">
       <article class="rounded-xl border border-border bg-card p-6 shadow-lg">
         <header class="mb-3 flex flex-col gap-1">
-          <span class="badge w-fit rounded-full bg-accent px-2 py-0.5 text-xs font-semibold tracking-wide text-accent-foreground uppercase">
-            Beta
+          <span class="badge bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-100">
+            {s.beta.badge}
           </span>
           <h2 id="beta-title" class="mt-1 text-xl font-semibold tracking-tight">
-            You are early
+            {s.beta.title}
           </h2>
           <p class="text-sm text-muted-foreground">
-            pdf.sy launches properly on{" "}
-            <strong class="font-medium text-foreground">{LAUNCH_LABEL}</strong>
-            <span data-beta-countdown />.
+            {s.beta.leadPlain}{" "}
+            <strong class="font-medium text-foreground">{s.beta.leadStrong}</strong>
           </p>
         </header>
 
         <section class="flex flex-col gap-3 text-sm">
-          <p class="text-muted-foreground">
-            Everything here is real and working, but it is being changed daily.
-            Please do not rely on it for anything that matters yet.
-          </p>
+          <p class="text-muted-foreground">{s.beta.body}</p>
           <ul class="flex flex-col gap-1.5 text-muted-foreground">
             <li class="flex gap-2">
               <span aria-hidden="true" class="text-primary">✓</span>
-              Share a PDF and get a tracked link
+              {s.beta.item1}
             </li>
             <li class="flex gap-2">
               <span aria-hidden="true" class="text-primary">✓</span>
-              See who opened it and which pages they read
+              {s.beta.item2}
             </li>
             <li class="flex gap-2">
               <span aria-hidden="true" class="text-primary">✓</span>
-              Free tools that never upload your file
+              {s.beta.item3}
             </li>
             <li class="flex gap-2">
               <span aria-hidden="true" class="text-muted-foreground/60">•</span>
-              Accounts and paid plans are still being wired up
+              {s.beta.item4}
             </li>
           </ul>
-          <p class="text-muted-foreground">
-            Links made without an account are deleted after seven days, so keep
-            your own copy of anything you upload.
-          </p>
+          <p class="text-muted-foreground">{s.beta.expiry}</p>
         </section>
 
         <footer class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button type="button" data-beta-close class="btn" data-variant="outline">
-            Got it
+            {s.beta.gotIt}
           </button>
           <a href="/new" class="btn" data-beta-close>
-            Try it anyway
+            {s.beta.tryIt}
           </a>
         </footer>
       </article>
@@ -259,51 +271,79 @@ const BetaDialog = () => (
 
 /**
  * A row of links on a wide screen; a full-width row inside the dropdown on a
- * narrow one. Centred label text reads as a button and left-aligned reads as a
- * menu, which is exactly the difference between the two cases.
+ * narrow one. Centred label text reads as a button and start-aligned reads as
+ * a menu, which is exactly the difference between the two cases.
+ *
+ * `justify-start` is logical, so the menu aligns to the left in English and to
+ * the right in Arabic without a second class.
  */
 const navItem = "btn w-full justify-start sm:w-auto sm:justify-center";
 
 /**
- * The links collapse below `sm`, but the theme switch and the one action this
- * site exists for do not. Both are small, and a visitor on a phone who has to
+ * The links collapse below `sm`, but the two switches and the one action this
+ * site exists for do not. All are small, and a visitor on a phone who has to
  * open a menu to share a PDF has been asked for a tap that buys nothing.
+ *
+ * Every margin that pushes something to one end is logical — `ms-auto`, not
+ * `ml-auto` — so the whole header mirrors itself under `dir="rtl"` with no
+ * Arabic-specific rule anywhere.
  */
-const SiteHeader = ({ user }: { user: SessionUser }) => (
+const SiteHeader = ({
+  s, user, lang, path,
+}: { s: Strings; user: SessionUser; lang: Lang; path: string }) => (
   <>
     <header class="relative border-b border-border">
       <div class="mx-auto flex h-16 w-full max-w-5xl items-center gap-4 px-5">
-        <a href={user ? "/dashboard" : "/"} class="flex items-center gap-2 font-semibold tracking-tight">
-          <FileText class="size-5 text-primary" />
-          pdf.sy
-        </a>
+        <div class="flex items-center gap-2">
+          <a href={user ? "/dashboard" : "/"} class="flex items-center gap-2 font-semibold tracking-tight">
+            <FileText class="size-5 text-primary" />
+            pdf.sy
+          </a>
+
+          {/* `.badge` and `[data-tooltip]` are both Basecoat's. The `before:`
+              overrides are the tooltip's: it clips to the badge's own overflow
+              and sizes itself against the badge's width, neither of which
+              suits a sentence this long. */}
+          <button
+            type="button"
+            data-beta-open
+            aria-label={s.beta.tipLabel}
+            data-tooltip={s.beta.tip}
+            data-side="bottom"
+            data-align="start"
+            class="badge cursor-pointer overflow-visible bg-sky-100 text-sky-900 before:w-64 before:font-normal before:whitespace-normal hover:bg-sky-200 dark:bg-sky-950 dark:text-sky-100 dark:hover:bg-sky-900"
+          >
+            {s.beta.badge}
+          </button>
+        </div>
 
         {/* Out of flow and under the header below `sm`, an ordinary flex row
             above it. `hidden` is the closed state; `sm:flex` outranks it, so
             the desktop layout never depends on the script having run. */}
         <nav
           id="site-nav"
-          class="absolute inset-x-0 top-full z-20 hidden flex-col gap-1 border-b border-border bg-popover p-3 text-sm text-popover-foreground shadow-lg sm:static sm:ml-auto sm:flex sm:flex-row sm:items-center sm:gap-1 sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none"
+          class="absolute inset-x-0 top-full z-20 hidden flex-col gap-1 border-b border-border bg-popover p-3 text-sm text-popover-foreground shadow-lg sm:static sm:ms-auto sm:flex sm:flex-row sm:items-center sm:gap-1 sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none"
         >
-          <a href="/tools" class={navItem} data-variant="ghost" data-size="sm">Tools</a>
-          <a href="/pricing" class={navItem} data-variant="ghost" data-size="sm">Pricing</a>
+          <a href="/tools" class={navItem} data-variant="ghost" data-size="sm">{s.nav.tools}</a>
+          <a href="/pricing" class={navItem} data-variant="ghost" data-size="sm">{s.nav.pricing}</a>
           {user ? (
             <>
-              <a href="/dashboard" class={navItem} data-variant="ghost" data-size="sm">Your links</a>
+              <a href="/dashboard" class={navItem} data-variant="ghost" data-size="sm">{s.nav.yourLinks}</a>
               <form method="post" action="/api/auth/logout" class="w-full sm:w-auto">
-                <button type="submit" class={navItem} data-variant="ghost" data-size="sm">Sign out</button>
+                <button type="submit" class={navItem} data-variant="ghost" data-size="sm">{s.nav.signOut}</button>
               </form>
             </>
           ) : (
-            <a href="/login" class={navItem} data-variant="ghost" data-size="sm">Sign in</a>
+            <a href="/login" class={navItem} data-variant="ghost" data-size="sm">{s.nav.signIn}</a>
           )}
         </nav>
 
-        {/* The action first, then the two icon buttons together as a pair. */}
-        <div class="ml-auto flex items-center gap-1 sm:ml-0">
-          <a href="/new" class="btn" data-size="sm">Share a PDF</a>
-          <ThemeToggle />
-          <MenuButton />
+        {/* The action first, then the switches and the menu as one group. */}
+        <div class="ms-auto flex items-center gap-1 sm:ms-0">
+          <a href="/new" class="btn" data-size="sm">{s.nav.share}</a>
+          <LanguageToggle s={s} lang={lang} path={path} />
+          <ThemeToggle s={s} />
+          <MenuButton s={s} />
         </div>
       </div>
     </header>
@@ -317,7 +357,7 @@ const SiteHeader = ({ user }: { user: SessionUser }) => (
  * attribute a screen reader is told about and the one a sighted visitor sees
  * cannot drift apart — there is only the one.
  */
-const MenuButton = () => (
+const MenuButton = ({ s }: { s: Strings }) => (
   <button
     type="button"
     data-menu-button
@@ -326,7 +366,7 @@ const MenuButton = () => (
     data-size="icon-sm"
     aria-controls="site-nav"
     aria-expanded="false"
-    aria-label="Menu"
+    aria-label={s.nav.menu}
   >
     <Menu class="group-aria-expanded:hidden" aria-hidden="true" />
     <X class="hidden group-aria-expanded:block" aria-hidden="true" />
@@ -342,29 +382,69 @@ const MenuButton = () => (
  * browser will land on, so a name like "Switch to dark mode" would be a coin
  * toss in the accessibility tree until JavaScript corrected it.
  */
-const ThemeToggle = () => (
+const ThemeToggle = ({ s }: { s: Strings }) => (
   <button
     type="button"
     data-theme-toggle
     class="btn"
     data-variant="ghost"
     data-size="icon-sm"
-    title="Switch theme"
-    aria-label="Switch between light and dark mode"
+    title={s.nav.themeTitle}
+    aria-label={s.nav.themeLabel}
   >
     <Sun class="hidden dark:block" aria-hidden="true" />
     <Moon class="dark:hidden" aria-hidden="true" />
   </button>
 );
 
-const SiteFooter = () => (
+/**
+ * The language switch, sitting immediately before the theme switch so the two
+ * read as a pair of preferences rather than two unrelated controls.
+ *
+ * A link, not a button: the choice is a real navigation with a real URL, so it
+ * works with JavaScript disabled, survives a middle-click into a new tab, and
+ * needs no client code at all. The label always names the language you would
+ * be moving *to* — showing the current one is the classic version of this
+ * control that nobody can read.
+ *
+ * Same `btn` / `ghost` / `icon-sm` combination as the theme switch next to it,
+ * with nothing layered on top — two controls that sit together should be the
+ * same control at different jobs, and Basecoat's icon-sm is a 2rem square that
+ * a two-letter label fits inside without any help.
+ *
+ * `lang` and `dir` on the element itself matter more than they look: without
+ * them a screen reader in an Arabic page announces "EN" with Arabic phonetics,
+ * and the browser may shape the Latin letters against the surrounding RTL run.
+ */
+const LanguageToggle = ({
+  s, lang, path,
+}: { s: Strings; lang: Lang; path: string }) => {
+  const other: Lang = lang === "ar" ? "en" : "ar";
+
+  return (
+    <a
+      href={switchHref(path, other)}
+      class="btn"
+      data-variant="ghost"
+      data-size="icon-sm"
+      lang={other}
+      dir={dirOf(other)}
+      title={s.meta.otherLangName}
+      aria-label={s.meta.switchLabel}
+    >
+      {s.meta.otherLangShort}
+    </a>
+  );
+};
+
+const SiteFooter = ({ s }: { s: Strings }) => (
   <footer class="border-t border-border">
     <div class="mx-auto flex w-full max-w-5xl flex-col gap-2 px-5 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center">
-      <p>pdf.sy — send a PDF as a link, and see what happens to it.</p>
-      <nav class="flex gap-4 sm:ml-auto">
-        <a href="/privacy" class="hover:text-foreground">Privacy</a>
-        <a href="/terms" class="hover:text-foreground">Terms</a>
-        <a href="/report" class="hover:text-foreground">Report a file</a>
+      <p>{s.footer.tagline}</p>
+      <nav class="flex gap-4 sm:ms-auto">
+        <a href="/privacy" class="hover:text-foreground">{s.footer.privacy}</a>
+        <a href="/terms" class="hover:text-foreground">{s.footer.terms}</a>
+        <a href="/report" class="hover:text-foreground">{s.footer.report}</a>
       </nav>
     </div>
   </footer>

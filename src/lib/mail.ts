@@ -1,6 +1,7 @@
 // Email. Resend in production; without an API key it logs to the console so the
 // whole auth flow stays testable locally without signing up for anything.
 import type { Bindings } from "../db/schema";
+import { stringsFor, dirOf, type Lang } from "./i18n";
 
 type Mail = { to: string; subject: string; html: string; text: string };
 
@@ -34,33 +35,67 @@ export async function send(env: Bindings, mail: Mail): Promise<void> {
 
 /* -------------------------------- templates ------------------------------- */
 
-const shell = (body: string) => `
-<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;background:#FCFCFD;padding:32px 16px;color:#101828">
+/**
+ * Direction is set with the `dir` attribute rather than a stylesheet because
+ * mail clients strip <style> blocks freely but honour inline attributes. The
+ * font stack names IBM Plex Sans Arabic first for Arabic on the chance the
+ * reader has it installed, then falls back — a webfont cannot be loaded here,
+ * since almost every client blocks remote resources by default.
+ */
+const shell = (body: string, lang: Lang = "en") => {
+  const s = stringsFor(lang);
+  const font =
+    lang === "ar"
+      ? `'IBM Plex Sans Arabic',-apple-system,BlinkMacSystemFont,'Segoe UI',Tahoma,sans-serif`
+      : `-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif`;
+
+  return `
+<div dir="${dirOf(lang)}" lang="${lang}" style="font-family:${font};background:#FCFCFD;padding:32px 16px;color:#101828">
   <div style="max-width:520px;margin:0 auto;background:#fff;border:1px solid #EAECF0;border-radius:12px;padding:28px">
     <p style="margin:0 0 20px;font-weight:600;font-size:15px;color:#101828">pdf.sy</p>
     ${body}
   </div>
   <p style="max-width:520px;margin:16px auto 0;font-size:12px;color:#667085">
-    pdf.sy — send a PDF as a link, and see what happens to it.
+    ${s.email.footer}
   </p>
 </div>`;
+};
 
 const button = (href: string, label: string) => `
   <a href="${href}" style="display:inline-block;background:#47B881;color:#fff;text-decoration:none;font-weight:500;font-size:15px;padding:11px 18px;border-radius:8px">${label}</a>`;
 
-export function magicLinkEmail(url: string): Omit<Mail, "to"> {
+/**
+ * The sign-in link.
+ *
+ * Takes a language because it is sent straight back at someone who has just
+ * submitted a form on the site — so the language they were reading is known,
+ * and is the right one to reply in.
+ *
+ * The "someone opened your document" email below deliberately does NOT do this.
+ * That one is triggered by a *reader's* request, and the only language in hand
+ * at that point is the reader's, not the owner's. Writing the owner's
+ * notification in whatever language their reader happened to be browsing in
+ * would be worse than leaving it in English. Fixing it properly means storing a
+ * language preference on the account, which is a change to the users table.
+ */
+export function magicLinkEmail(url: string, lang: Lang = "en"): Omit<Mail, "to"> {
+  const s = stringsFor(lang);
+
   return {
-    subject: "Your pdf.sy sign-in link",
-    html: shell(`
-      <h1 style="margin:0 0 8px;font-size:20px;font-weight:600">Sign in to pdf.sy</h1>
+    subject: s.email.signInSubject,
+    html: shell(
+      `
+      <h1 style="margin:0 0 8px;font-size:20px;font-weight:600">${s.email.signInTitle}</h1>
       <p style="margin:0 0 20px;font-size:15px;line-height:1.55;color:#475467">
-        This link works once and expires in 15 minutes.
+        ${s.email.signInBody}
       </p>
-      ${button(url, "Sign in")}
+      ${button(url, s.email.signInButton)}
       <p style="margin:22px 0 0;font-size:13px;color:#667085">
-        If you did not ask for this, you can ignore it — nothing has changed.
-      </p>`),
-    text: `Sign in to pdf.sy\n\n${url}\n\nThis link works once and expires in 15 minutes. If you did not ask for it, ignore this email.`,
+        ${s.email.signInIgnore}
+      </p>`,
+      lang,
+    ),
+    text: `${s.email.signInTitle}\n\n${url}\n\n${s.email.signInBody} ${s.email.signInIgnore}`,
   };
 }
 

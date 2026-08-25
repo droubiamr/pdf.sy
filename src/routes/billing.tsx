@@ -5,73 +5,62 @@ import { Layout } from "../components/layout";
 import { PRICING, planOf, type Plan, type BillingPeriod } from "../lib/plans";
 import { createCheckoutSession, createPortalSession, verifyWebhook, type StripeEvent } from "../lib/stripe";
 import { siteUrl } from "../lib/urls";
+import { t } from "../lib/i18n";
+import type { Strings } from "../lib/strings/en";
 
 export const billing = new Hono<Env>();
 
 /* -------------------------------- pricing -------------------------------- */
 
 billing.get("/pricing", (c) => {
+  const s = t(c);
   const user = c.get("user");
   const current = planOf(user);
 
-  return c.html(
-    <Layout
-      user={user}
-      title="Pricing — pdf.sy"
-      description="Free to share. Three dollars a month to know who read it."
-      script="/assets/pricing.js"
-    >
-      <section class="mx-auto w-full max-w-4xl px-5 py-16">
-        <h1 class="text-3xl font-semibold tracking-tight">Simple pricing</h1>
-        <p class="mt-2 max-w-[55ch] text-muted-foreground">
-          The free tier is genuinely useful — a link nobody can open is not much
-          of a product. You pay when you want to know what happened after you sent it.
-        </p>
+  // Prices live in lib/plans.ts as a figure and a note. The figure is the same
+  // in both languages; only the note is prose, so that is the only half that
+  // gets translated here.
+  const monthly = (amount: string) => ({ amount, note: s.pricing.perMonth });
+  const yearly = (amount: string) => ({ amount, note: s.pricing.perMonthYearly });
 
-        <PeriodToggle />
+  return c.html(
+    <Layout c={c} title={s.pricing.title} description={s.pricing.description} script="/assets/pricing.js">
+      <section class="mx-auto w-full max-w-4xl px-5 py-16">
+        <h1 class="text-3xl font-semibold tracking-tight">{s.pricing.h1}</h1>
+        <p class="mt-2 max-w-[55ch] text-muted-foreground">{s.pricing.lead}</p>
+
+        <PeriodToggle s={s} />
 
         <div class="mt-6 grid items-stretch gap-4 md:grid-cols-3">
           <Tier
-            name="Free" monthly={{ amount: "$0", note: "forever" }}
+            s={s}
+            name={s.pricing.freeName}
+            monthly={{ amount: s.pricing.freeAmount, note: s.pricing.forever }}
             current={Boolean(user) && current === "free"}
-            features={[
-              "5 active links",
-              "Total view counts",
-              "All browser-side tools",
-              "QR code for every link",
-              "Revoke any link",
-            ]}
+            features={[s.pricing.free1, s.pricing.free2, s.pricing.free3, s.pricing.free4, s.pricing.free5]}
           />
           <Tier
-            name={PRICING.lite.label} monthly={PRICING.lite.monthly} yearly={PRICING.lite.yearly}
+            s={s}
+            name={PRICING.lite.label}
+            monthly={monthly(PRICING.lite.monthly.amount)}
+            yearly={yearly(PRICING.lite.yearly.amount)}
             highlight current={Boolean(user) && current === "lite"} plan="lite"
-            features={[
-              "Unlimited links",
-              "Per-page reading time",
-              "Email when someone opens it",
-              "Password, expiry, block downloads",
-              "Replace the file, keep the link",
-              "No pdf.sy badge",
-            ]}
+            features={[s.pricing.lite1, s.pricing.lite2, s.pricing.lite3, s.pricing.lite4, s.pricing.lite5, s.pricing.lite6]}
           />
           <Tier
-            name={PRICING.pro.label} monthly={PRICING.pro.monthly} yearly={PRICING.pro.yearly}
+            s={s}
+            name={PRICING.pro.label}
+            monthly={monthly(PRICING.pro.monthly.amount)}
+            yearly={yearly(PRICING.pro.yearly.amount)}
             current={Boolean(user) && current === "pro"} plan="pro"
-            features={[
-              "Everything in Lite",
-              "Team spaces",
-              "Require an email to view",
-              "Per-viewer watermarks",
-              "Custom domain",
-              "API access",
-            ]}
+            features={[s.pricing.pro1, s.pricing.pro2, s.pricing.pro3, s.pricing.pro4, s.pricing.pro5, s.pricing.pro6]}
           />
         </div>
 
         {user && user.stripe_customer_id && (
           <p class="mt-8 text-sm text-muted-foreground">
-            <a href="/api/billing/portal" class="font-medium underline">Manage your subscription</a>
-            {" "}— change plan, update card, or cancel.
+            <a href="/api/billing/portal" class="font-medium underline">{s.pricing.manage}</a>
+            {s.pricing.manageRest}
           </p>
         )}
       </section>
@@ -90,21 +79,21 @@ billing.get("/pricing", (c) => {
  * but hidden, so a visitor whose JavaScript never arrives still gets a working
  * monthly page rather than a blank one.
  */
-const PeriodToggle = () => (
+const PeriodToggle = ({ s }: { s: Strings }) => (
   <div
     id="billing-period"
     role="group"
-    aria-label="Billing period"
+    aria-label={s.pricing.period}
     class="mt-8 inline-flex w-fit items-center gap-1 rounded-lg bg-muted p-1"
   >
-    <PeriodButton period="monthly" label="Monthly" pressed />
-    <PeriodButton period="yearly" label="Yearly" />
+    <PeriodButton period="monthly" label={s.pricing.monthly} pressed />
+    <PeriodButton period="yearly" label={s.pricing.yearly} save={s.pricing.save} />
   </div>
 );
 
 const PeriodButton = ({
-  period, label, pressed,
-}: { period: BillingPeriod; label: string; pressed?: boolean }) => (
+  period, label, pressed, save,
+}: { period: BillingPeriod; label: string; pressed?: boolean; save?: string }) => (
   <button
     type="button"
     data-period={period}
@@ -112,7 +101,7 @@ const PeriodButton = ({
     class="rounded-md px-4 py-1.5 text-sm font-medium text-muted-foreground transition-colors aria-pressed:bg-card aria-pressed:text-foreground aria-pressed:shadow-sm"
   >
     {label}
-    {period === "yearly" && <span class="ml-1.5 text-xs font-normal text-primary">Save 33%</span>}
+    {save && <span class="ms-1.5 text-xs font-normal text-primary">{save}</span>}
   </button>
 );
 
@@ -120,14 +109,18 @@ type TierPrice = { amount: string; note: string };
 
 const Price = ({ amount, note }: TierPrice) => (
   <>
-    <span class="text-3xl font-semibold tracking-tight">{amount}</span>
-    <span class="ml-1.5 text-sm text-muted-foreground">{note}</span>
+    {/* "$3" is a Latin run sitting in an Arabic line. <bdi> isolates it so the
+        currency symbol stays on the correct side of the digits, without
+        dragging the price to the wrong edge of the card. */}
+    <bdi class="text-3xl font-semibold tracking-tight">{amount}</bdi>
+    <span class="ms-1.5 text-sm text-muted-foreground">{note}</span>
   </>
 );
 
 const Tier = ({
-  name, monthly, yearly, features, highlight, current, plan,
+  s, name, monthly, yearly, features, highlight, current, plan,
 }: {
+  s: Strings;
   name: string;
   monthly: TierPrice;
   /** Absent on Free — there is nothing to switch between. */
@@ -159,7 +152,7 @@ const Tier = ({
     </ul>
     <footer class="mt-auto pt-6">
       {current ? (
-        <span class="btn w-full" data-variant="outline" aria-disabled="true">Your plan</span>
+        <span class="btn w-full" data-variant="outline" aria-disabled="true">{s.pricing.yourPlan}</span>
       ) : plan ? (
         <form method="post" action="/api/billing/checkout" class="w-full">
           <input type="hidden" name="plan" value={plan} />
@@ -167,11 +160,11 @@ const Tier = ({
               beats the script still buys a real price rather than nothing. */}
           <input type="hidden" name="period" value="monthly" data-period-input="1" />
           <button type="submit" class="btn w-full" data-variant={highlight ? "primary" : "outline"}>
-            Choose {name}
+            {s.pricing.choose(name)}
           </button>
         </form>
       ) : (
-        <a href="/new" class="btn w-full" data-variant="outline">Start free</a>
+        <a href="/new" class="btn w-full" data-variant="outline">{s.pricing.startFree}</a>
       )}
     </footer>
   </div>

@@ -6,9 +6,14 @@
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import type { Context } from "hono";
 import type { Bindings } from "../db/schema";
+import type { Env } from "./context";
 import { newId, sha256Hex } from "./ids";
 
-type Ctx = Context<{ Bindings: Bindings; Variables: { user: User | null } }>;
+// The real environment rather than a hand-copied shape. This is a type-only
+// import, so the cycle with lib/context.ts (which imports `User` from here)
+// costs nothing at runtime — and it means adding a request variable cannot
+// leave a second, stale definition of the same thing behind in this file.
+type Ctx = Context<Env>;
 
 export const SESSION_COOKIE = "pdfsy_session";
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days

@@ -2,6 +2,8 @@
 // honestly. No framework — this page is the first thing a recipient sees and it
 // should never wait on a bundle.
 
+import { t } from "./i18n";
+
 type PdfJs = typeof import("pdfjs-dist");
 type PdfDoc = Awaited<ReturnType<PdfJs["getDocument"]>["promise"]>;
 
@@ -157,5 +159,5 @@ window.addEventListener("pagehide", () => flush(true));
 document.getElementById("download")?.addEventListener("click", () => { downloaded = true; flush(false); });
 
 boot().catch(() => {
-  if (loading) loading.textContent = "This document could not be loaded.";
+  if (loading) loading.textContent = t("viewerFailed");
 });

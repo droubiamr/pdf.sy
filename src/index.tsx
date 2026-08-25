@@ -4,6 +4,7 @@ import type { Env } from "./lib/context";
 import type { Bindings } from "./db/schema";
 import { currentUser, SESSION_COOKIE } from "./lib/auth";
 import { securityHeaders } from "./lib/security";
+import { detectLang, t } from "./lib/i18n";
 import { sweep } from "./lib/retention";
 import { pages } from "./routes/pages";
 import { api } from "./routes/api";
@@ -13,6 +14,7 @@ import { dashboard } from "./routes/dashboard";
 import { links } from "./routes/links";
 import { billing } from "./routes/billing";
 import { legal } from "./routes/legal";
+import { lang } from "./routes/lang";
 import { Layout } from "./components/layout";
 
 const app = new Hono<Env>();
@@ -28,29 +30,52 @@ app.use("*", async (c, next) => {
   await next();
 });
 
+// Language, resolved once and read everywhere through `t(c)`.
+//
+// Deliberately a per-request variable rather than a module-level one. Requests
+// interleave at every `await` inside a Worker isolate, so a shared "current
+// language" global would be read by one request after another had already
+// overwritten it — a page in the wrong language, and only under load.
+app.use("*", async (c, next) => {
+  c.set("lang", detectLang(c));
+  await next();
+});
+
+// A page cached by the CDN must not be handed to a reader whose cookie asks for
+// the other language. Naming the cookie here is what keeps the two variants
+// apart wherever this response is stored.
+app.use("*", async (c, next) => {
+  await next();
+  if (c.res.headers.get("content-type")?.includes("text/html")) {
+    c.res.headers.append("vary", "cookie, accept-language");
+  }
+});
+
 app.route("/", auth);
 app.route("/", dashboard);
 app.route("/", links);
 app.route("/", billing);
 app.route("/", legal);
+app.route("/", lang);
 app.route("/api", api);
 app.route("/", pages);
 
 // Registered last: `/:slug` is a catch-all and must lose to every real route.
 app.route("/", view);
 
-app.notFound((c) =>
-  c.html(
-    <Layout title="Not found — pdf.sy" user={c.get("user")}>
+app.notFound((c) => {
+  const s = t(c);
+  return c.html(
+    <Layout c={c} title={s.notFound.title}>
       <section class="mx-auto w-full max-w-lg px-5 py-24 text-center">
-        <h1 class="text-2xl font-semibold tracking-tight">Nothing here</h1>
-        <p class="mt-2 text-muted-foreground">That page or link does not exist.</p>
-        <a href="/" class="btn mt-6">Go home</a>
+        <h1 class="text-2xl font-semibold tracking-tight">{s.notFound.h1}</h1>
+        <p class="mt-2 text-muted-foreground">{s.notFound.body}</p>
+        <a href="/" class="btn mt-6">{s.notFound.home}</a>
       </section>
     </Layout>,
     404,
-  ),
-);
+  );
+});
 
 /**
  * Two entry points now, not one.

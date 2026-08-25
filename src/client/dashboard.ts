@@ -1,6 +1,8 @@
 // Two small jobs: hand over links created before signing in, and toggle the
 // per-link email notification.
 
+import { t } from "./i18n";
+
 type Owned = Record<string, { token: string; title?: string; at?: number }>;
 
 async function claimLocalLinks() {
@@ -25,9 +27,11 @@ async function claimLocalLinks() {
   const banner = document.getElementById("claim-banner");
   const text = document.getElementById("claim-text");
   if (banner && text) {
-    text.textContent =
-      `Added ${claimed} link${claimed === 1 ? "" : "s"} you created before signing in. ` +
-      `They no longer expire. Refreshing…`;
+    // Phrased as "{n} of the links…" rather than pluralising the noun. English
+    // needs one plural form here and Arabic needs several depending on the
+    // count, and a partitive sentence is correct in both without either
+    // language carrying the other's grammar.
+    text.textContent = t("claimed", { n: claimed });
     banner.classList.remove("hidden");
   }
   setTimeout(() => location.reload(), 1200);
