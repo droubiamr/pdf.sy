@@ -1,0 +1,11 @@
+-- "Stay signed in".
+--
+-- The choice is made on the login form, but the session is not created until
+-- the magic link is clicked — a different request, minutes later, often on a
+-- different device. Nothing carried state across that gap, so the checkbox has
+-- to travel with the link itself.
+--
+-- DEFAULT 1 matters: every link already in flight when this migration runs has
+-- no value here, and the behaviour it was created under was a 30-day session.
+-- Defaulting to 1 means those keep working exactly as their owner expected.
+ALTER TABLE magic_links ADD COLUMN remember INTEGER NOT NULL DEFAULT 1;

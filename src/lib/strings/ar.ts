@@ -35,6 +35,7 @@ export const ar: Strings = {
     yourLinks: "روابطك",
     signIn: "تسجيل الدخول",
     signOut: "تسجيل الخروج",
+    admin: "الإدارة",
     share: "شارك ملف PDF",
     menu: "القائمة",
     themeTitle: "تبديل المظهر",
@@ -243,6 +244,10 @@ export const ar: Strings = {
     emailLabel: "البريد الإلكتروني",
     emailPlaceholder: "you@company.com",
     submit: "أرسل لي رابطاً",
+    stayLabel: "أبقني مسجّل الدخول",
+    stayTipLabel: "شو يعني إبقاء تسجيل الدخول؟",
+    stayTip:
+      "إذا كان مؤشراً، يبقى هذا المتصفح مسجّل الدخول 30 يوماً. وإذا ألغيته، ينتهي دخولك عند إغلاق المتصفح — استخدم هذا على جهاز مشترك أو عام.",
     claimNote:
       "تسجيل الدخول يضم إليك أيضاً أي روابط أنشأتها على هذا الجهاز، فتتوقف عن الانتهاء.",
     expiredTitle: "انتهى الرابط — pdf.sy",

@@ -16,7 +16,20 @@ import { newId, sha256Hex } from "./ids";
 type Ctx = Context<Env>;
 
 export const SESSION_COOKIE = "pdfsy_session";
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+/**
+ * Two session lifetimes, chosen by the "stay signed in" box on the login form.
+ *
+ * The short one is a backstop, not the main mechanism. Unticked, the cookie is
+ * written with no `maxAge` at all, which makes it a *session cookie* — the
+ * browser drops it when it closes, and nothing on our side is involved. The
+ * reason there is still a server-side cap: Chrome, Edge and Firefox all offer
+ * "continue where you left off", and when that is on they restore session
+ * cookies after a restart. So on a shared machine the browser's promise alone
+ * is not one we can make. Twelve hours is ours, and it is enforced in
+ * `auth_sessions.expires_at` where the person at the keyboard cannot edit it.
+ */
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days, ticked
+const SESSION_TTL_SHORT_MS = 12 * 60 * 60 * 1000; // 12 hours, unticked
 const MAGIC_LINK_TTL_MS = 15 * 60 * 1000;        // 15 minutes
 const MAGIC_LINKS_PER_HOUR = 5;
 
@@ -45,8 +58,16 @@ export const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
 /* ------------------------------- magic links ------------------------------ */
 
-/** Returns null when the address has asked too often in the last hour. */
-export async function createMagicLink(db: D1Database, rawEmail: string): Promise<string | null> {
+/**
+ * Returns null when the address has asked too often in the last hour.
+ *
+ * `remember` rides along on the row because the session it governs is not
+ * created here — it is created when the link is clicked, in a different
+ * request. See migrations/0005.
+ */
+export async function createMagicLink(
+  db: D1Database, rawEmail: string, remember: boolean,
+): Promise<string | null> {
   const email = normalizeEmail(rawEmail);
   const since = Date.now() - 60 * 60 * 1000;
 
@@ -59,22 +80,29 @@ export async function createMagicLink(db: D1Database, rawEmail: string): Promise
   const token = newToken();
   const now = Date.now();
   await db
-    .prepare(`INSERT INTO magic_links (id, email, expires_at, created_at) VALUES (?, ?, ?, ?)`)
-    .bind(await hash(token), email, now + MAGIC_LINK_TTL_MS, now)
+    .prepare(
+      `INSERT INTO magic_links (id, email, expires_at, created_at, remember)
+       VALUES (?, ?, ?, ?, ?)`,
+    )
+    .bind(await hash(token), email, now + MAGIC_LINK_TTL_MS, now, remember ? 1 : 0)
     .run();
 
   return token;
 }
 
+export type ConsumedLink = { email: string; remember: boolean };
+
 /** Single use: the same link cannot be replayed, even inside its 15 minutes. */
-export async function consumeMagicLink(db: D1Database, token: string): Promise<string | null> {
+export async function consumeMagicLink(
+  db: D1Database, token: string,
+): Promise<ConsumedLink | null> {
   const id = await hash(token);
   const now = Date.now();
 
   const row = await db
-    .prepare(`SELECT email, expires_at, used_at FROM magic_links WHERE id = ?`)
+    .prepare(`SELECT email, expires_at, used_at, remember FROM magic_links WHERE id = ?`)
     .bind(id)
-    .first<{ email: string; expires_at: number; used_at: number | null }>();
+    .first<{ email: string; expires_at: number; used_at: number | null; remember: number }>();
 
   if (!row || row.used_at || row.expires_at < now) return null;
 
@@ -85,7 +113,7 @@ export async function consumeMagicLink(db: D1Database, token: string): Promise<s
   // If two tabs race, only the update that changed a row wins.
   if (claimed.meta.changes !== 1) return null;
 
-  return row.email;
+  return { email: row.email, remember: row.remember === 1 };
 }
 
 /* --------------------------------- users --------------------------------- */
@@ -112,13 +140,24 @@ export async function findOrCreateUser(db: D1Database, rawEmail: string): Promis
 
 /* -------------------------------- sessions -------------------------------- */
 
-export async function startSession(c: Ctx, userId: string): Promise<void> {
+/**
+ * `remember` decides how long this lasts, and it is applied in two places on
+ * purpose: the database row and the cookie.
+ *
+ * The database is the one that counts. A cookie's lifetime is a hint the
+ * browser is free to ignore and the person holding it is free to edit — an
+ * expiry enforced only there is not an expiry. `expires_at` in `auth_sessions`
+ * is checked by `currentUser` on every request, so a cookie that outlives its
+ * row simply stops working.
+ */
+export async function startSession(c: Ctx, userId: string, remember: boolean): Promise<void> {
   const token = newToken();
   const now = Date.now();
+  const ttl = remember ? SESSION_TTL_MS : SESSION_TTL_SHORT_MS;
 
   await c.env.DB.prepare(
     `INSERT INTO auth_sessions (id, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)`,
-  ).bind(await hash(token), userId, now + SESSION_TTL_MS, now).run();
+  ).bind(await hash(token), userId, now + ttl, now).run();
 
   setCookie(c, SESSION_COOKIE, token, {
     httpOnly: true,
@@ -127,7 +166,12 @@ export async function startSession(c: Ctx, userId: string): Promise<void> {
     sameSite: "Lax",
     secure: new URL(c.req.url).protocol === "https:",
     path: "/",
-    maxAge: SESSION_TTL_MS / 1000,
+    // Omitted entirely when not remembering, which is what makes it a session
+    // cookie. Passing 0 or a short number would instead write a cookie that
+    // expires on a clock — a different thing, and one that survives the browser
+    // closing. There is no `maxAge: undefined` shortcut here: the key has to be
+    // absent from the object, not present and undefined.
+    ...(remember ? { maxAge: SESSION_TTL_MS / 1000 } : {}),
   });
 }
 

@@ -24,6 +24,7 @@ export const en = {
     yourLinks: "Your links",
     signIn: "Sign in",
     signOut: "Sign out",
+    admin: "Admin",
     share: "Share a PDF",
     menu: "Menu",
     themeTitle: "Switch theme",
@@ -232,6 +233,10 @@ export const en = {
     emailLabel: "Email",
     emailPlaceholder: "you@company.com",
     submit: "Email me a link",
+    stayLabel: "Stay signed in",
+    stayTipLabel: "What does staying signed in do?",
+    stayTip:
+      "Ticked, this browser stays signed in for 30 days. Unticked, you are signed out when you close the browser — use that on a shared or public computer.",
     claimNote:
       "Signing in also claims any links you created on this device, so they stop expiring.",
     expiredTitle: "Link expired — pdf.sy",

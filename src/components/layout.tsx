@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import type { Child } from "hono/jsx";
 import { FileText, Menu, Moon, Sun, X } from "./icons";
 import type { Env } from "../lib/context";
+import { isAdminEmail } from "../lib/admin";
 import type { Strings } from "../lib/strings/en";
 import { clientJson, dirOf, switchHref, t, type Lang } from "../lib/i18n";
 
@@ -183,7 +184,12 @@ export const Layout = ({ c, title, description, children, script, bare, noindex 
         {script && <script type="module" src={script} defer />}
       </head>
       <body class="min-h-dvh flex flex-col">
-        {!bare && <SiteHeader s={s} user={user} lang={lang} path={url.pathname + url.search} />}
+        {!bare && (
+          <SiteHeader
+            s={s} user={user} lang={lang} path={url.pathname + url.search}
+            isAdmin={isAdminEmail(c.env, user?.email)}
+          />
+        )}
         <main class="flex-1">{children}</main>
         {!bare && <SiteFooter s={s} />}
         {!bare && <BetaDialog s={s} />}
@@ -289,8 +295,8 @@ const navItem = "btn w-full justify-start sm:w-auto sm:justify-center";
  * Arabic-specific rule anywhere.
  */
 const SiteHeader = ({
-  s, user, lang, path,
-}: { s: Strings; user: SessionUser; lang: Lang; path: string }) => (
+  s, user, lang, path, isAdmin,
+}: { s: Strings; user: SessionUser; lang: Lang; path: string; isAdmin: boolean }) => (
   <>
     <header class="relative border-b border-border">
       <div class="mx-auto flex h-16 w-full max-w-5xl items-center gap-4 px-5">
@@ -328,6 +334,19 @@ const SiteHeader = ({
           <a href="/pricing" class={navItem} data-variant="ghost" data-size="sm">{s.nav.pricing}</a>
           {user ? (
             <>
+              {/* Drawn only for an address on the ADMIN_EMAILS allowlist, so
+                  nobody else is told the console exists. It is a shortcut, not
+                  the lock: /admin re-checks independently and 404s regardless
+                  of whether this link was ever rendered. */}
+              {isAdmin && (
+                <a
+                  href="/admin"
+                  class={`${navItem} text-primary`}
+                  data-variant="ghost" data-size="sm"
+                >
+                  {s.nav.admin}
+                </a>
+              )}
               <a href="/dashboard" class={navItem} data-variant="ghost" data-size="sm">{s.nav.yourLinks}</a>
               <form method="post" action="/api/auth/logout" class="w-full sm:w-auto">
                 <button type="submit" class={navItem} data-variant="ghost" data-size="sm">{s.nav.signOut}</button>

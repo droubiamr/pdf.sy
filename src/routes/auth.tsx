@@ -47,6 +47,61 @@ auth.get("/login", async (c) => {
                 id="email" name="email" type="email" required autofocus
                 autocomplete="email" placeholder={s.auth.emailPlaceholder} dir="ltr" class="input"
               />
+              {/* Ticked by default: the overwhelming majority of sign-ins are
+                  somebody on their own laptop, and asking them to opt in to the
+                  normal case every time is the friction this box exists to
+                  remove. Unticking it is the deliberate act, not ticking it.
+
+                  Basecoat's `.field` with `data-orientation="horizontal"` does
+                  the layout — the control beside a <section> holding its label
+                  and its description, aligned to the top. Same component the
+                  rest of Basecoat's forms use; nothing here is hand-rolled. */}
+              <div class="field mt-1" data-orientation="horizontal">
+                <input
+                  type="checkbox" id="remember" name="remember" value="1" checked
+                  aria-describedby="remember-help" class="input size-4 shrink-0"
+                />
+                <section>
+                  <p class="text-sm">
+                    <label for="remember" class="cursor-pointer">{s.auth.stayLabel}</label>
+                    {/* The superscript question mark, m²-style.
+                    
+                        Tailwind's preflight already gives <sup> the three
+                        properties this needs — 75% size, raised half an em, and
+                        `position: relative` — so the character sits on the
+                        shoulder of the last letter with no positioning of our
+                        own. It is deliberately OUTSIDE the <label>: a click
+                        anywhere inside a label toggles its checkbox, so a `?`
+                        in there would silently untick the box people came to
+                        read about.
+
+                        `aria-hidden`, and no tabindex, because Basecoat's
+                        tooltip is hover-only by design — it explicitly hides
+                        itself on :focus-visible. A tab stop that shows nothing
+                        is worse than no tab stop. Everyone not using a mouse
+                        gets the real sentence below instead. */}
+                    <sup
+                      aria-hidden="true"
+                      data-tooltip={s.auth.stayTip}
+                      data-side="top"
+                      class="hidden cursor-help text-muted-foreground before:w-64 before:rounded-md before:bg-popover before:px-3 before:py-2 before:text-xs before:font-normal before:whitespace-normal before:text-popover-foreground before:shadow-md before:ring-1 before:ring-border sm:inline"
+                    >
+                      ?
+                    </sup>
+                  </p>
+
+                  {/* Visible on a phone, where there is no hover and the tooltip
+                      above can never open. From `sm` up it becomes `sr-only`
+                      rather than `hidden`: still announced by a screen reader
+                      through `aria-describedby`, which a `display: none`
+                      element would not be. One sentence, one place, reaching
+                      every reader by whichever route suits their device. */}
+                  <p id="remember-help" class="text-xs text-muted-foreground sm:sr-only">
+                    {s.auth.stayTip}
+                  </p>
+                </section>
+              </div>
+
               {/* A plain form, so the browser submits the token itself — no
                   client code needed here, unlike the upload pages. */}
               <Turnstile action="login" siteKey={c.env.TURNSTILE_SITE_KEY} />
@@ -63,6 +118,9 @@ auth.get("/login", async (c) => {
 auth.post("/api/auth/magic-link", async (c) => {
   const form = await c.req.formData();
   const email = normalizeEmail(String(form.get("email") ?? "").slice(0, 320));
+  // An unticked checkbox is not submitted at all, so absence is the "no". The
+  // box is ticked by default, which makes the common path the one that arrives.
+  const remember = form.get("remember") === "1";
 
   // The per-address limit in lib/auth.ts stops one inbox being flooded. It does
   // nothing about the opposite shape of the same abuse: one caller asking for
@@ -93,7 +151,7 @@ auth.post("/api/auth/magic-link", async (c) => {
   // A refusal is silent for the same reason — telling a caller they have been
   // limited also tells them the limit exists and where it sits.
   if (verdict.ok && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-    const token = await createMagicLink(c.env.DB, email);
+    const token = await createMagicLink(c.env.DB, email, remember);
     if (token) {
       const url = new URL(`/auth/verify?token=${encodeURIComponent(token)}`, siteUrl(c)).toString();
       // Written in the language they are reading the site in. This is the one
@@ -107,9 +165,9 @@ auth.post("/api/auth/magic-link", async (c) => {
 
 auth.get("/auth/verify", async (c) => {
   const token = c.req.query("token");
-  const email = token ? await consumeMagicLink(c.env.DB, token) : null;
+  const link = token ? await consumeMagicLink(c.env.DB, token) : null;
 
-  if (!email) {
+  if (!link) {
     const s = t(c);
     return c.html(
       <Layout c={c} title={s.auth.expiredTitle} noindex>
@@ -123,8 +181,8 @@ auth.get("/auth/verify", async (c) => {
     );
   }
 
-  const user = await findOrCreateUser(c.env.DB, email);
-  await startSession(c, user.id);
+  const user = await findOrCreateUser(c.env.DB, link.email);
+  await startSession(c, user.id, link.remember);
   await c.env.DB.prepare(`UPDATE users SET last_seen_at = ? WHERE id = ?`).bind(Date.now(), user.id).run();
 
   return c.redirect("/dashboard?welcome=1", 303);
