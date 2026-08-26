@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import type { Child } from "hono/jsx";
-import { FileText, Menu, Moon, Sun, X } from "./icons";
+import { FileText, Menu, Moon, Sun, Upload, X } from "./icons";
 import type { Env } from "../lib/context";
 import { isAdminEmail } from "../lib/admin";
 import type { Strings } from "../lib/strings/en";
@@ -102,8 +102,43 @@ const MENU_JS = `(function(){
   document.addEventListener('keydown', function(e){ if (e.key === 'Escape') set(false); });
 })();`;
 
+// The account menu, opened by the avatar.
+//
+// Deliberately not Basecoat's dropdown-menu.js. That file needs `window.basecoat`
+// from a second core file — 4 KB between them, and a MutationObserver running on
+// every page — to do what the fifteen lines below already do for the mobile nav.
+// Basecoat's *styling* is still what dresses the menu: `.dropdown-menu` and
+// `[data-popover]` come straight from the library, and its CSS deliberately
+// keeps the hover styles alive for menus its own JS never initialised.
+//
+// Same trade the beta notice makes: Basecoat's `.dialog` class on the browser's
+// own <dialog> element.
+const ACCOUNT_JS = `(function(){
+  var btn = document.querySelector('[data-account-button]');
+  var menu = document.getElementById('account-menu');
+  if (!btn || !menu) return;
+
+  function set(open){
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    // aria-hidden, not a class: that is the attribute Basecoat's popover CSS
+    // watches, so the fade and the accessibility tree are the same switch.
+    menu.setAttribute('aria-hidden', open ? 'false' : 'true');
+  }
+
+  btn.addEventListener('click', function(e){
+    e.stopPropagation();
+    set(btn.getAttribute('aria-expanded') !== 'true');
+  });
+  document.addEventListener('click', function(e){
+    if (!menu.contains(e.target)) set(false);
+  });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') { set(false); btn.focus(); }
+  });
+})();`;
+
 /** Every inline script on the site. The CSP hashes this list and nothing else. */
-export const INLINE_SCRIPTS: readonly string[] = [THEME_JS, BETA_JS, MENU_JS];
+export const INLINE_SCRIPTS: readonly string[] = [THEME_JS, BETA_JS, MENU_JS, ACCOUNT_JS];
 
 type SessionUser = { email: string } | null | undefined;
 
@@ -299,7 +334,11 @@ const SiteHeader = ({
 }: { s: Strings; user: SessionUser; lang: Lang; path: string; isAdmin: boolean }) => (
   <>
     <header class="relative border-b border-border">
-      <div class="mx-auto flex h-16 w-full max-w-5xl items-center gap-4 px-5">
+      {/* gap-2 below `sm`: signed out, the row is logo + Beta + Sign in + Share
+            + two switches + the hamburger, and at 375px that came to four pixels
+            more than an iPhone SE has. Eight pixels of gap is the cheapest
+            thing in the row to give up — nothing is hidden and nothing shrinks. */}
+        <div class="mx-auto flex h-16 w-full max-w-5xl items-center gap-2 px-5 sm:gap-4">
         <div class="flex items-center gap-2">
           <a href={user ? "/dashboard" : "/"} class="flex items-center gap-2 font-semibold tracking-tight">
             <FileText class="size-5 text-primary" />
@@ -330,46 +369,129 @@ const SiteHeader = ({
           id="site-nav"
           class="absolute inset-x-0 top-full z-20 hidden flex-col gap-1 border-b border-border bg-popover p-3 text-sm text-popover-foreground shadow-lg sm:static sm:ms-auto sm:flex sm:flex-row sm:items-center sm:gap-1 sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none"
         >
+          {/* Site navigation only. Everything to do with *you* lives in the
+              account menu on the right — the split this header was missing. */}
           <a href="/tools" class={navItem} data-variant="ghost" data-size="sm">{s.nav.tools}</a>
           <a href="/pricing" class={navItem} data-variant="ghost" data-size="sm">{s.nav.pricing}</a>
-          {user ? (
-            <>
-              {/* Drawn only for an address on the ADMIN_EMAILS allowlist, so
-                  nobody else is told the console exists. It is a shortcut, not
-                  the lock: /admin re-checks independently and 404s regardless
-                  of whether this link was ever rendered. */}
-              {isAdmin && (
-                <a
-                  href="/admin"
-                  class={`${navItem} text-primary`}
-                  data-variant="ghost" data-size="sm"
-                >
-                  {s.nav.admin}
-                </a>
-              )}
-              <a href="/dashboard" class={navItem} data-variant="ghost" data-size="sm">{s.nav.yourLinks}</a>
-              <form method="post" action="/api/auth/logout" class="w-full sm:w-auto">
-                <button type="submit" class={navItem} data-variant="ghost" data-size="sm">{s.nav.signOut}</button>
-              </form>
-            </>
-          ) : (
-            <a href="/login" class={navItem} data-variant="ghost" data-size="sm">{s.nav.signIn}</a>
-          )}
         </nav>
 
-        {/* The action first, then the switches and the menu as one group. */}
+        {/* The action, the switches, and you. Sign in sits here rather than in
+            the nav above for one reason: the nav collapses behind the hamburger
+            below `sm`, and burying the way in on a phone is the opposite of the
+            point. */}
         <div class="ms-auto flex items-center gap-1 sm:ms-0">
-          <a href="/new" class="btn" data-size="sm">{s.nav.share}</a>
+          {!user && (
+            <a href="/login" class="btn" data-variant="outline" data-size="sm">{s.nav.signIn}</a>
+          )}
+          {/* Icon-only on a phone, icon and label from `sm` up.
+              Adding the account avatar pushed this row past 375px — the header
+              scrolled sideways on an iPhone SE. Dropping the label below `sm`
+              buys back about 70px, and keeps the primary action a green filled
+              button rather than hiding it behind the hamburger, which is the
+              one thing this row must not do. */}
+          <a href="/new" class="btn" data-size="sm" aria-label={s.nav.share}>
+            <Upload aria-hidden="true" />
+            <span class="hidden sm:inline">{s.nav.share}</span>
+          </a>
           <LanguageToggle s={s} lang={lang} path={path} />
           <ThemeToggle s={s} />
+          {user && <AccountMenu s={s} user={user} isAdmin={isAdmin} />}
           <MenuButton s={s} />
         </div>
       </div>
     </header>
 
     <script dangerouslySetInnerHTML={{ __html: MENU_JS }} />
+    {user && <script dangerouslySetInnerHTML={{ __html: ACCOUNT_JS }} />}
   </>
 );
+
+/**
+ * Who you are, and the two things you do about it.
+ *
+ * Replaces three ghost links that used to sit in the nav looking exactly like
+ * Tools and Pricing. Collapsing them costs one click and buys three things: the
+ * header stops growing every time an account page is added, "sign out" is where
+ * everyone already looks for it, and — the part that was missing entirely — the
+ * page finally says *which* account you are signed in as.
+ *
+ * `.dropdown-menu`, `[data-popover]` and `.avatar` are all Basecoat, including
+ * the placement: `data-side` and `data-align` are the popover's own API, and
+ * they are direction-aware, so the panel hangs from the correct corner in
+ * Arabic without a second rule. Positioning it by hand with `end-0` instead —
+ * which is what this first did — fights the component: Basecoat already pins
+ * the *start* edge when no `data-align` is given, and the two together left the
+ * menu 141px off the left of an RTL screen.
+ */
+const AccountMenu = (
+  { s, user, isAdmin }: { s: Strings; user: { email: string }; isAdmin: boolean },
+) => (
+  <div class="dropdown-menu">
+    <button
+      type="button"
+      data-account-button
+      class="avatar size-8 rounded-full"
+      aria-haspopup="menu"
+      aria-controls="account-menu"
+      aria-expanded="false"
+      aria-label={s.nav.account}
+      title={user.email}
+    >
+      {/* An initial rather than a photo: there is nowhere to upload one, and a
+          generic silhouette tells you nothing a letter does not. */}
+      <span class="bg-accent font-medium text-accent-foreground" aria-hidden="true">
+        {user.email.slice(0, 1).toUpperCase()}
+      </span>
+    </button>
+
+    <div
+      id="account-menu"
+      data-popover
+      data-side="bottom"
+      data-align="end"
+      aria-hidden="true"
+      class="w-56 border border-border p-1"
+    >
+      <div role="menu" aria-label={s.nav.account}>
+        {/* Not a menuitem — there is nothing to activate. It is the answer to
+            "am I in the right account", which is why the menu opens at all. */}
+        <p class="truncate px-2 py-1.5 text-xs text-muted-foreground" title={user.email}>
+          <bdi>{user.email}</bdi>
+        </p>
+
+        <hr role="separator" class="-mx-1 my-1 h-px border-0 bg-border" />
+
+        <a href="/dashboard" role="menuitem" class={menuItem}>{s.nav.yourLinks}</a>
+
+        {/* Drawn only for an address on the ADMIN_EMAILS allowlist, so nobody
+            else is told the console exists. A shortcut, not the lock: /admin
+            re-checks independently and 404s whether or not this was rendered. */}
+        {isAdmin && (
+          <a href="/admin" role="menuitem" class={`${menuItem} text-primary`}>{s.nav.admin}</a>
+        )}
+
+        <hr role="separator" class="-mx-1 my-1 h-px border-0 bg-border" />
+
+        {/* A POST, because a GET that ends your session can be fired by any
+            prefetcher or image tag on any page. `role="none"` makes the form
+            transparent to a screen reader, so the button below it is still a
+            direct child of the menu as far as the accessibility tree cares. */}
+        <form method="post" action="/api/auth/logout" role="none">
+          <button type="submit" role="menuitem" class={`${menuItem} text-destructive`}>
+            {s.nav.signOut}
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+);
+
+/**
+ * Padding and shape only. Basecoat's `.dropdown-menu [role="menuitem"]` already
+ * supplies the layout and the hover — including, deliberately, for menus its own
+ * JavaScript never initialised, which is exactly the case here.
+ */
+const menuItem = "rounded-sm px-2 py-1.5 text-sm";
 
 /**
  * The icon follows `aria-expanded` rather than a class of its own, so the

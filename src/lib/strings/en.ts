@@ -25,6 +25,7 @@ export const en = {
     signIn: "Sign in",
     signOut: "Sign out",
     admin: "Admin",
+    account: "Account",
     share: "Share a PDF",
     menu: "Menu",
     themeTitle: "Switch theme",

@@ -36,6 +36,7 @@ export const ar: Strings = {
     signIn: "تسجيل الدخول",
     signOut: "تسجيل الخروج",
     admin: "الإدارة",
+    account: "الحساب",
     share: "شارك ملف PDF",
     menu: "القائمة",
     themeTitle: "تبديل المظهر",
