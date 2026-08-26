@@ -15,6 +15,8 @@ import { links } from "./routes/links";
 import { billing } from "./routes/billing";
 import { legal } from "./routes/legal";
 import { lang } from "./routes/lang";
+import { admin } from "./routes/admin";
+import { adminActions } from "./routes/admin-actions";
 import { Layout } from "./components/layout";
 
 const app = new Hono<Env>();
@@ -50,6 +52,11 @@ app.use("*", async (c, next) => {
     c.res.headers.append("vary", "cookie, accept-language");
   }
 });
+
+// Before everything else: /admin/* is its own tree, gated by its own
+// middleware, and nothing below should ever get a chance to answer for it.
+app.route("/", admin);
+app.route("/", adminActions);
 
 app.route("/", auth);
 app.route("/", dashboard);

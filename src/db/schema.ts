@@ -83,4 +83,10 @@ export type Bindings = {
   TURNSTILE_SECRET?: string;
   /** Comma-separated allowlist. Falls back to the request's own host. */
   TURNSTILE_HOSTNAMES?: string;
+  /**
+   * Comma-separated email addresses that may open /admin. Unset or empty
+   * switches the console off entirely — see lib/admin.ts for why this is an
+   * environment variable and not a column on `users`.
+   */
+  ADMIN_EMAILS?: string;
 };

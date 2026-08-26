@@ -111,8 +111,10 @@ async function purgeStaleAuth(env: Bindings): Promise<{ sessions: number; magicL
 }
 
 export async function sweep(env: Bindings): Promise<SweepReport> {
-  const cutoff = Date.now() - GRACE_MS;
+  const startedAt = Date.now();
+  const cutoff = startedAt - GRACE_MS;
   const report: SweepReport = { documents: 0, objects: 0, sessions: 0, magicLinks: 0, limits: 0 };
+  const failures: string[] = [];
 
   for (const documentId of await expiredDocuments(env, cutoff)) {
     try {
@@ -122,6 +124,7 @@ export async function sweep(env: Bindings): Promise<SweepReport> {
       // One bad document must not strand the rest of the batch, and it will be
       // picked up again tomorrow.
       console.error("retention: could not purge document", documentId, error);
+      failures.push(documentId);
     }
   }
 
@@ -131,5 +134,42 @@ export async function sweep(env: Bindings): Promise<SweepReport> {
   report.limits = await purgeExpiredLimits(env);
 
   console.log("retention sweep", JSON.stringify(report));
+  await record(env, startedAt, report, failures);
   return report;
+}
+
+/**
+ * Leave a row behind saying this ran.
+ *
+ * Without it, "the cron is healthy" and "the cron has not fired since Tuesday"
+ * look identical from outside — and the second is a privacy-policy breach in
+ * slow motion, because files promised deleted are still sitting in R2. The
+ * admin console reads this table and says which of the two is true.
+ *
+ * Wrapped in its own try/catch and never rethrown: a bookkeeping row failing to
+ * write must not turn a sweep that successfully deleted a hundred files into a
+ * reported failure.
+ */
+async function record(
+  env: Bindings, startedAt: number, report: SweepReport, failures: string[],
+): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `INSERT INTO sweep_runs
+         (id, ran_at, duration_ms, documents, objects, sessions, magic_links, limits, error)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      crypto.randomUUID(),
+      startedAt,
+      Date.now() - startedAt,
+      report.documents,
+      report.objects,
+      report.sessions,
+      report.magicLinks,
+      report.limits,
+      failures.length ? `${failures.length} document(s) could not be purged` : null,
+    ).run();
+  } catch (error) {
+    console.error("retention: could not record the run", error);
+  }
 }

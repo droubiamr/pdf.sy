@@ -85,6 +85,8 @@ src/
   lib/password.ts    PBKDF2 link passwords + the unlock cookie
   lib/stripe.ts      Checkout, portal, webhook signature verification
   lib/versions.ts    Resolves which version a link actually serves
+  lib/admin.ts       Who may open /admin, and the audit-log writer
+  lib/admin-queries.ts  Every platform-wide read the console does
   routes/
     pages.tsx        Landing, upload, tools, stats
     api.ts           Upload, view sessions, dwell pings, notifications
@@ -93,8 +95,11 @@ src/
     dashboard.tsx    Your links, with view counts and the notify toggle
     links.tsx        Link settings, notify toggle, replace-the-file
     billing.tsx      Pricing, checkout, portal, Stripe webhook
+    admin.tsx        The console's eight pages. Read-only, all of it.
+    admin-actions.ts The console's mutations. Block, delete, resolve, sweep.
   components/        Layout and icons
-  client/            Browser bundles: upload, viewer, tools, dashboard
+  components/admin/  The console's own shell and dashboard primitives
+  client/            Browser bundles: upload, viewer, tools, dashboard, admin
   styles/app.css     Tailwind + Basecoat + the Paper palette
 
 Migrations are applied by `scripts/migrate.mjs`, which tracks what has already
@@ -171,3 +176,37 @@ Anonymous links expire after `ANON_LINK_TTL_DAYS`. Uploads are checked for the
 PDF magic number and against a SHA-256 blocklist. Still missing before any
 public launch: Turnstile on upload, per-IP rate limits, virus scanning, and a
 published DMCA process with a named contact.
+
+Reports land in `abuse_reports` and are worked from the Moderation page of the
+admin console. `scripts/moderate.mjs` does the same job from a terminal and is
+kept deliberately — it is the tool that still works when the Worker does not.
+
+## Admin console
+
+`/admin`, eight pages: Overview, Documents, Engagement, Accounts, Revenue,
+Moderation, System, Audit log. English only, and server-rendered like the rest
+of the site — the only client-side JavaScript is a sidebar toggle, a twenty-
+second poll for the live counter, and a confirm dialog before anything
+destructive.
+
+Access is the `ADMIN_EMAILS` secret: a comma-separated allowlist of email
+addresses, matched case-insensitively against the signed-in account.
+
+```
+npx wrangler secret put ADMIN_EMAILS
+```
+
+Three properties worth not breaking:
+
+- **It is an environment variable, not a column.** No screen anywhere grants
+  admin, so the only path to it is deploy access. A privilege-escalation bug in
+  the app cannot make somebody an admin.
+- **Unset means off.** An empty or missing `ADMIN_EMAILS` 404s the whole tree,
+  which is what a fresh clone of this repo should do.
+- **The refusal is a 404, not a 403.** A stranger should not learn the route
+  exists. Both the pages and the actions check independently — a layout cannot
+  protect a POST.
+
+Every action that changes something writes a row to `admin_audit` before it
+returns. That table is append-only: nothing in the console can edit or delete
+from it.

@@ -31,7 +31,7 @@ const LAUNCH_DATE = "2026-09-09";
 // colour. The switch itself is handled by a listener on `document` rather than
 // on the button: the button has not been parsed yet at this point, and a
 // delegated listener does not care.
-const THEME_JS = `(function(){
+export const THEME_JS = `(function(){
   var KEY = 'pdfsy-theme';
   var root = document.documentElement;
   var os = matchMedia('(prefers-color-scheme: dark)');

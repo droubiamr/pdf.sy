@@ -15,6 +15,12 @@
 //
 // Add --remote to act on production. Everything defaults to the local database
 // so that a half-remembered command is a rehearsal rather than an incident.
+//
+// The Moderation page of the admin console now does all of this with buttons,
+// and is the better tool nine times out of ten. This is kept for the tenth: it
+// talks to D1 through wrangler rather than through the Worker, so it still
+// works when the Worker is broken, mid-deploy, or refusing to boot — which is
+// exactly the sort of moment a takedown becomes urgent.
 import { execFileSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";

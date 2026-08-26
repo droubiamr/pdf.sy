@@ -87,6 +87,7 @@ await esbuild.build({
     tools: "src/client/tools.ts",
     dashboard: "src/client/dashboard.ts",
     pricing: "src/client/pricing.ts",
+    admin: "src/client/admin.ts",
   },
   outdir: "public/assets",
   bundle: true,

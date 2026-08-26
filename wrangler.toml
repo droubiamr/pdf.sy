@@ -66,6 +66,17 @@ TURNSTILE_SITE_KEY = "0x4AAAAAAEZr2gYqpkziK-NN"
 # localhost working. Pin it once pdf.sy is the only hostname serving this.
 # TURNSTILE_HOSTNAMES = "pdf.sy,www.pdf.sy"
 
+# ADMIN_EMAILS is a secret too, and not because knowing the address grants
+# anything — signing in still requires the magic link landing in that inbox.
+# It is a secret because wrangler.toml is committed, and publishing the
+# operator's personal address in a public repo is a phishing target for free:
+#
+#   npx wrangler secret put ADMIN_EMAILS
+#
+# Comma-separated, matched case-insensitively. Unset or empty means /admin
+# returns 404 for everyone, including you — which is what a fresh clone of this
+# repo should do. See src/lib/admin.ts.
+
 # RESEND_API_KEY is a secret, not a var:
 #   npx wrangler secret put RESEND_API_KEY
 # Without it, mail is printed to the console instead of sent, which is exactly
