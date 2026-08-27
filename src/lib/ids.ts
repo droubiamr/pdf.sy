@@ -53,6 +53,6 @@ export async function hashIp(ip: string, salt: string): Promise<string> {
 export const RESERVED_SLUGS = new Set([
   "api", "v", "l", "new", "tools", "assets", "vendor", "about", "terms",
   "privacy", "report", "pricing", "login", "signup", "dashboard", "docs",
-  "auth", "logout", "claim", "settings", "account", "contribute", "admin",
+  "auth", "logout", "claim", "settings", "account",
   "favicon.ico", "robots.txt", "sitemap.xml",
 ]);

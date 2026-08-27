@@ -16,7 +16,6 @@ import { billing } from "./routes/billing";
 import { legal } from "./routes/legal";
 import { lang } from "./routes/lang";
 import { admin } from "./routes/admin";
-import { contribute } from "./routes/contribute";
 import { adminActions } from "./routes/admin-actions";
 import { Layout } from "./components/layout";
 
@@ -58,11 +57,6 @@ app.use("*", async (c, next) => {
 // middleware, and nothing below should ever get a chance to answer for it.
 app.route("/", admin);
 app.route("/", adminActions);
-
-// Internal docs. Its own allowlist, weaker than the console's — see
-// requireContributor in lib/admin.ts. Registered up here with the other
-// gated trees so nothing below can answer for it.
-app.route("/", contribute);
 
 app.route("/", auth);
 app.route("/", dashboard);
