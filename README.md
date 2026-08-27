@@ -1,10 +1,18 @@
 # pdf.sy
 
-Send a PDF as a link, and see what happens to it.
+Every PDF tool in one place — and the only one that tells you what happened
+after you shared it.
 
-Upload a PDF, get a short link, and find out who opened it, for how long, and
-which page they stopped on. The free browser-side tools (merge, split, rotate)
-exist to feed that link — they are the funnel, not the product.
+Merge, split, rotate and compress, free and entirely in your browser. Then send
+a PDF as a short link and find out who opened it, for how long, and which page
+they stopped on.
+
+The toolbox is how people find us; the tracked link is how the business works.
+Both halves get the same care — see [docs/vision.md](docs/vision.md).
+
+**New here?** Start with [CONTRIBUTING.md](CONTRIBUTING.md), then
+[docs/](docs/) — [what we are building](docs/vision.md), [how it is put
+together](docs/architecture.md), and [why it is that way](docs/decisions/).
 
 ## Stack
 
@@ -53,8 +61,15 @@ off rather than breaking:
 npx wrangler secret put RESEND_API_KEY        # or email lands in the Worker log
 npx wrangler secret put STRIPE_SECRET_KEY
 npx wrangler secret put STRIPE_WEBHOOK_SECRET
-npx wrangler secret put STRIPE_PRICE_PRO      # price_… for the Pro plan
-npx wrangler secret put STRIPE_PRICE_BUSINESS
+```
+
+The Stripe **price IDs are vars, not secrets** — they name a price, they do not
+authorise a charge — so they live in `wrangler.toml` alongside the rest. There
+are four, because monthly and yearly are separate, unrelated objects in Stripe:
+
+```
+STRIPE_PRICE_LITE_MONTHLY   STRIPE_PRICE_LITE_YEARLY
+STRIPE_PRICE_PRO_MONTHLY    STRIPE_PRICE_PRO_YEARLY
 ```
 
 Point a Stripe webhook at `https://<your-host>/api/billing/webhook` for
@@ -156,7 +171,7 @@ That gap is the entire signup pitch, so keep it.
 
 ## Link controls
 
-Pro unlocks passwords (PBKDF2, with an unlock cookie derived from the stored
+Lite and Pro unlock passwords (PBKDF2, with an unlock cookie derived from the stored
 hash so changing the password invalidates it), expiry, blocking downloads, and
 replacing the file behind a link. Revoking is free for everyone — you can always
 take back something you shared.
@@ -166,9 +181,12 @@ Replacing a file adds a version and leaves `pinned_version` NULL, which means
 
 ## What is not built yet
 
-Phases 1–3 are done: the tracked link, accounts, notifications, and the paywall
-with link controls. Still to come: server-side compression (phase 4), then teams,
-email gating, watermarks and the public API (phase 5).
+Built: merge, split and rotate; the tracked link and viewer; accounts,
+notifications and the paywall with link controls; Arabic; the admin console.
+
+Next: compression. After that, convert and edit, then teams, email gating,
+watermarks and the public API. The current state is tabulated in
+[docs/vision.md](docs/vision.md).
 
 ## Abuse
 

@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { ViewSession, PageStat } from "../db/schema";
 import type { Env } from "../lib/context";
 import { Layout } from "../components/layout";
-import { BarChart, Copy, Link2, Merge, QrCode, RotateCw, Scissors, Shrink, Upload } from "../components/icons";
+import { BarChart, Copy, Link2, Merge, Pencil, QrCode, Repeat, RotateCw, Scissors, Shrink, Upload } from "../components/icons";
 import { formatDateTime, formatMs } from "../lib/format";
 import { siteUrl } from "../lib/urls";
 import { t } from "../lib/i18n";
@@ -30,44 +30,70 @@ pages.get("/", (c) => {
           {s.landing.heroTitle}
         </h1>
         <p class="mt-5 max-w-[55ch] text-lg text-muted-foreground">{s.landing.heroBody}</p>
+        {/* The toolbox leads, because that is what the headline promises and
+            it is the surface people arrive searching for. Sharing is the
+            second button rather than the first — the tools page carries its
+            own "share this result" prompt, which is the better moment to ask. */}
         <div class="mt-8 flex flex-wrap gap-3">
-          <a href="/new" class="btn" data-size="lg">
-            <Upload /> {s.landing.ctaShare}
-          </a>
-          <a href="/tools" class="btn" data-variant="outline" data-size="lg">
+          <a href="/tools" class="btn" data-size="lg">
             {s.landing.ctaTools}
           </a>
+          <a href="/new" class="btn" data-variant="outline" data-size="lg">
+            <Upload /> {s.landing.ctaShare}
+          </a>
         </div>
       </section>
 
-      <section class="border-y border-border bg-card">
-        <div class="mx-auto grid w-full max-w-5xl gap-px px-5 py-14 sm:grid-cols-3">
-          <Step
-            icon={<Link2 class="size-5 text-primary" />}
-            title={s.landing.step1Title}
-            body={s.landing.step1Body}
-          />
-          <Step
-            icon={<BarChart class="size-5 text-primary" />}
-            title={s.landing.step2Title}
-            body={s.landing.step2Body}
-          />
-          <Step
-            icon={<QrCode class="size-5 text-primary" />}
-            title={s.landing.step3Title}
-            body={s.landing.step3Body}
-          />
-        </div>
-      </section>
-
+      {/* The toolbox, first. Six cards rather than four: the three that work
+          today plus the three the product is heading for, each carrying the
+          "Soon" badge and rendering as plain markup rather than a link. That
+          is the same honesty rule compression already followed — listing an
+          unbuilt tool is fine, letting somebody click through to nothing is
+          not — and together they are what says "all in one place" without a
+          sentence claiming it. */}
       <section class="mx-auto w-full max-w-5xl px-5 py-16">
         <h2 class="text-2xl font-semibold tracking-tight">{s.landing.toolsTitle}</h2>
         <p class="mt-2 max-w-[55ch] text-muted-foreground">{s.landing.toolsBody}</p>
-        <div class="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <ToolCard href="/tools#merge" icon={<Merge class="size-5" />} name={s.landing.mergeName} body={s.landing.mergeBody} />
           <ToolCard href="/tools#split" icon={<Scissors class="size-5" />} name={s.landing.splitName} body={s.landing.splitBody} />
           <ToolCard href="/tools#rotate" icon={<RotateCw class="size-5" />} name={s.landing.rotateName} body={s.landing.rotateBody} />
           <ToolCard href="/tools#compress" icon={<Shrink class="size-5" />} name={s.landing.compressName} body={s.landing.compressBody} soon={s.landing.soon} />
+          <ToolCard href="/tools#convert" icon={<Repeat class="size-5" />} name={s.landing.convertName} body={s.landing.convertBody} soon={s.landing.soon} />
+          <ToolCard href="/tools#edit" icon={<Pencil class="size-5" />} name={s.landing.editName} body={s.landing.editBody} soon={s.landing.soon} />
+        </div>
+      </section>
+
+      {/* Sharing, second — the differentiator rather than the whole pitch. It
+          keeps the card background and full-bleed border it had as the hero's
+          neighbour, which is now what marks it out as the part no other PDF
+          toolbox offers. */}
+      <section class="border-y border-border bg-card">
+        <div class="mx-auto w-full max-w-5xl px-5 py-14">
+          <h2 class="text-2xl font-semibold tracking-tight text-balance">{s.landing.shareTitle}</h2>
+          <p class="mt-2 max-w-[55ch] text-muted-foreground">{s.landing.shareBody}</p>
+
+          <div class="mt-8 grid gap-px sm:grid-cols-3">
+            <Step
+              icon={<Link2 class="size-5 text-primary" />}
+              title={s.landing.step1Title}
+              body={s.landing.step1Body}
+            />
+            <Step
+              icon={<BarChart class="size-5 text-primary" />}
+              title={s.landing.step2Title}
+              body={s.landing.step2Body}
+            />
+            <Step
+              icon={<QrCode class="size-5 text-primary" />}
+              title={s.landing.step3Title}
+              body={s.landing.step3Body}
+            />
+          </div>
+
+          <a href="/new" class="btn mt-8" data-size="lg">
+            <Upload /> {s.landing.ctaShare}
+          </a>
         </div>
       </section>
     </Layout>,

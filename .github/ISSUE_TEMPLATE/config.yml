@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Half-formed idea or open question
+    url: https://github.com/droubiamr/pdf.sy/discussions
+    about: Use Discussions for thinking out loud. Issues are for things with a definite shape.
+  - name: How we work here
+    url: https://github.com/droubiamr/pdf.sy/blob/main/CONTRIBUTING.md
+    about: Setup, the invariants, house style, and good first contributions.

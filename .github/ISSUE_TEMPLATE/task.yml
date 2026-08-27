@@ -1,0 +1,39 @@
+name: Task
+description: Something to build or change
+labels: ["task"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What
+      description: One or two sentences. What should exist afterwards that does not now?
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: What this unblocks, or who it is for. Skip if it is obvious.
+
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: How we will know it is finished.
+      placeholder: |
+        - [ ] Works in both languages
+        - [ ] Typecheck passes
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: invariants
+    attributes:
+      label: Touches an invariant?
+      description: "See CONTRIBUTING.md. Tick any this work goes near — it changes how carefully it gets reviewed."
+      options:
+        - label: Serving a file, or the slug gate
+        - label: Plan gating or billing
+        - label: Auth, sessions, or stored secrets
+        - label: Something that would run on the server rather than the browser

@@ -2,9 +2,11 @@
 
 What protects pdf.sy, what does not, and what you have to do by hand.
 
-The product is "anyone can upload a PDF anonymously and hand out a link". That
-is the whole value and it is also the whole exposure — most of what follows is
-about keeping that gap narrow rather than pretending it can be closed.
+Two halves, two very different risk profiles. The browser-side tools never
+upload anything, so they barely appear below. The sharing half is "anyone can
+upload a PDF anonymously and hand out a link" — that is where the value is and
+it is also the whole exposure, so most of what follows is about keeping that
+gap narrow rather than pretending it can be closed.
 
 ## The layers, outermost first
 
@@ -160,7 +162,6 @@ Honest list. None of these are fixed.
   and it is the right way to drop the per-IP report limit — which currently
   silently discards the sixth genuine reporter from one office.
 - **Downloaded files are not scanned for malware.**
-- **No admin UI.** Moderation is a CLI against production.
 - **`SITE_URL` is unset**, so links follow the request's `Host` header. Fine
   today; pin it once `pdf.sy` is the only hostname serving this.
 - **The manage token travels in the query string** (`?t=…`). `Referrer-Policy:

@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS users (
   id         TEXT PRIMARY KEY,
   email      TEXT UNIQUE NOT NULL,
   name       TEXT,
-  plan       TEXT NOT NULL DEFAULT 'free',   -- free | pro | business
+  plan       TEXT NOT NULL DEFAULT 'free',   -- free | lite | pro
   created_at INTEGER NOT NULL,
   last_seen_at INTEGER
 );

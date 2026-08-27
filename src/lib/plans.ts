@@ -27,7 +27,12 @@ const PAID_FEATURES: Feature[] = [
 
 const LIMITS: Record<Plan, { features: Feature[]; activeLinks: number | null }> = {
   free: {
-    // Free is useful on purpose: a link nobody can open is not a funnel.
+    // Free is useful on purpose, and note what is NOT listed here: the
+    // browser-side tools. Merge, split and rotate are free and unlimited for
+    // everyone forever, so they never reach this table at all — putting the
+    // acquisition surface behind a paywall would be charging for the thing
+    // that brings people in. What free does not get is the answer to "who
+    // read it", which is where the paywall belongs. See docs/vision.md.
     features: [],
     activeLinks: 5,
   },

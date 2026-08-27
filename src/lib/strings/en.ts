@@ -33,7 +33,7 @@ export const en = {
   },
 
   footer: {
-    tagline: "pdf.sy — send a PDF as a link, and see what happens to it.",
+    tagline: "pdf.sy — every PDF tool in one place.",
     privacy: "Privacy",
     terms: "Terms",
     report: "Report a file",
@@ -47,9 +47,9 @@ export const en = {
     leadPlain: "pdf.sy is still being built.",
     leadStrong: "Full launch is expected very soon.",
     body: "Everything here is real and working, but it is being changed daily. Please do not rely on it for anything that matters yet.",
-    item1: "Share a PDF and get a tracked link",
-    item2: "See who opened it and which pages they read",
-    item3: "Free tools that never upload your file",
+    item1: "Merge, split and rotate — free, and never uploaded",
+    item2: "Share a PDF and get a tracked link",
+    item3: "See who opened it and which pages they read",
     item4: "Accounts and paid plans are still being wired up",
     expiry: "Links made without an account are deleted after seven days, so keep your own copy of anything you upload.",
     gotIt: "Got it",
@@ -58,15 +58,19 @@ export const en = {
 
   /* ------------------------------- landing ------------------------------- */
   landing: {
-    title: "pdf.sy — send a PDF as a link, see what happens to it",
+    title: "pdf.sy — every PDF tool in one place",
     description:
-      "Upload a PDF, get a short link, and find out who opened it, for how long, and which pages they actually read.",
+      "Merge, split, rotate and compress PDFs free in your browser — then share one as a link and see who actually read it.",
     badge: "No account needed to try it",
-    heroTitle: "Send a PDF as a link. See what happens to it.",
+    heroTitle: "Every PDF tool in one place.",
     heroBody:
-      "Stop emailing attachments into the void. Share one short link, and know who opened it, how long they stayed, and which page they stopped on.",
+      "Merge, split, rotate and compress — free, inside your browser, with nothing uploaded. And when you send one, share it as a link that tells you who actually read it.",
+    ctaTools: "Open the tools",
     ctaShare: "Share a PDF",
-    ctaTools: "Free PDF tools",
+
+    shareTitle: "And one thing the other toolboxes do not do",
+    shareBody:
+      "Send a PDF as a short link instead of an attachment, and find out what happened to it afterwards.",
 
     step1Title: "One short link",
     step1Body:
@@ -78,9 +82,9 @@ export const en = {
     step3Body:
       "Every link comes with a QR code. Put a menu, a brochure, or a price list on a sign and update the file without reprinting.",
 
-    toolsTitle: "Free tools, no upload required",
+    toolsTitle: "Everything you do to a PDF",
     toolsBody:
-      "Merging, splitting and rotating all run inside your browser. Your file never leaves your device — which is faster than uploading it anyway.",
+      "Merging, splitting and rotating all run inside your browser. Your file never leaves your device — which is faster than uploading it anyway. More tools are on the way.",
     mergeName: "Merge",
     mergeBody: "Combine PDFs in any order",
     splitName: "Split",
@@ -89,6 +93,10 @@ export const en = {
     rotateBody: "Fix sideways scans",
     compressName: "Compress",
     compressBody: "Shrink for email",
+    convertName: "Convert",
+    convertBody: "To and from Word and images",
+    editName: "Edit",
+    editBody: "Reorder, delete and add pages",
     soon: "Soon",
   },
 
@@ -374,7 +382,7 @@ export const en = {
     signInBody: "This link works once and expires in 15 minutes.",
     signInButton: "Sign in",
     signInIgnore: "If you did not ask for this, you can ignore it — nothing has changed.",
-    footer: "pdf.sy — send a PDF as a link, and see what happens to it.",
+    footer: "pdf.sy — every PDF tool in one place.",
   },
 
   /* -------------------------------- legal -------------------------------- */

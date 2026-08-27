@@ -1,0 +1,39 @@
+name: Decision needed
+description: A choice that should be settled before anyone builds
+labels: ["decision"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For questions where the answer is expensive to reverse. Once it is
+        settled, the outcome becomes a record in `docs/decisions/`.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: The question
+      description: State it as a question with a real answer.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: What makes this a choice
+      description: Constraints, costs, what already exists that pushes one way or the other.
+    validations:
+      required: true
+
+  - type: textarea
+    id: options
+    attributes:
+      label: Options on the table
+      description: Each with the cost of taking it. Include "do nothing" if it is real.
+    validations:
+      required: true
+
+  - type: input
+    id: deadline
+    attributes:
+      label: Blocking anything?
+      description: What is waiting on this, if anything.

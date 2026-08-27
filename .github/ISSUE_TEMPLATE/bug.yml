@@ -1,0 +1,40 @@
+name: Bug
+description: Something is broken or behaves wrongly
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, and what you saw instead of what you expected.
+    validations:
+      required: true
+
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      description: URL or route, and whether it was local or production.
+      placeholder: "production, /l/abc123/stats"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language
+      description: RTL bugs are common enough to be worth always asking.
+      options:
+        - English
+        - Arabic
+        - Both
+        - Not language-specific
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Anything in the logs
+      description: Worker logs or the browser console, if you looked.
+      render: shell
