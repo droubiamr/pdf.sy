@@ -89,4 +89,10 @@ export type Bindings = {
    * environment variable and not a column on `users`.
    */
   ADMIN_EMAILS?: string;
+  /**
+   * Comma-separated addresses that may read /contribute. Weaker than
+   * ADMIN_EMAILS and separate from it on purpose: onboarding somebody to the
+   * codebase should not hand them the console. Admins pass automatically.
+   */
+  CONTRIBUTOR_EMAILS?: string;
 };
