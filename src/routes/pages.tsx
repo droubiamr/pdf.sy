@@ -23,9 +23,6 @@ pages.get("/", (c) => {
   return c.html(
     <Layout c={c} title={s.landing.title} description={s.landing.description}>
       <section class="mx-auto w-full max-w-5xl px-5 pt-16 pb-14 sm:pt-24">
-        <p class="mb-4 inline-flex items-center gap-2 rounded-full bg-accent px-3 py-1 text-xs font-medium text-accent-foreground">
-          {s.landing.badge}
-        </p>
         <h1 class="max-w-[18ch] text-4xl font-semibold tracking-tight text-balance sm:text-6xl">
           {s.landing.heroTitle}
         </h1>

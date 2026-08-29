@@ -37,6 +37,17 @@ export const en = {
     privacy: "Privacy",
     terms: "Terms",
     report: "Report a file",
+    contact: "Contact us",
+  },
+
+  contact: {
+    title: "Contact us",
+    intro: "Questions, bug reports, or just to say hello — any of these reach us.",
+    instagram: "Instagram",
+    facebook: "Facebook",
+    email: "Email",
+    external: "opens in a new tab",
+    close: "Close",
   },
 
   beta: {
@@ -61,7 +72,6 @@ export const en = {
     title: "pdf.sy — every PDF tool in one place",
     description:
       "Merge, split, rotate and compress PDFs free in your browser — then share one as a link and see who actually read it.",
-    badge: "No account needed to try it",
     heroTitle: "Every PDF tool in one place.",
     heroBody:
       "Merge, split, rotate and compress — free, inside your browser, with nothing uploaded. And when you send one, share it as a link that tells you who actually read it.",

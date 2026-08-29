@@ -191,3 +191,30 @@ export const Trash = (p: P) => (
     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M10 11v6M14 11v6" />
   </svg>
 );
+
+export const Instagram = (p: P) => (
+  <svg {...base} class={p.class}>
+    <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+    <path d="M17.5 6.5h.01" />
+  </svg>
+);
+
+export const Facebook = (p: P) => (
+  <svg {...base} class={p.class}>
+    <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
+  </svg>
+);
+
+export const Mail = (p: P) => (
+  <svg {...base} class={p.class}>
+    <rect width="20" height="16" x="2" y="4" rx="2" />
+    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+  </svg>
+);
+
+export const ArrowUpRight = (p: P) => (
+  <svg {...base} class={p.class}>
+    <path d="M7 7h10v10M7 17 17 7" />
+  </svg>
+);

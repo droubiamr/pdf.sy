@@ -1,6 +1,8 @@
 import type { Context } from "hono";
 import type { Child } from "hono/jsx";
-import { FileText, Menu, Moon, Sun, Upload, X } from "./icons";
+import {
+  ArrowUpRight, Facebook, FileText, Instagram, Mail, Menu, Moon, Sun, Upload, X,
+} from "./icons";
 import type { Env } from "../lib/context";
 import { isAdminEmail } from "../lib/admin";
 import type { Strings } from "../lib/strings/en";
@@ -137,8 +139,24 @@ const ACCOUNT_JS = `(function(){
   });
 })();`;
 
+// The contact sheet, opened from the footer. Shorter than the beta notice's
+// script because there is nothing to remember: no "seen" flag, no first-visit
+// case. Open on click, close on click — Escape, the backdrop and returning
+// focus to the footer button are the <dialog> element's own behaviour.
+const CONTACT_JS = `(function(){
+  var d = document.getElementById('contact-dialog');
+  if (!d) return;
+
+  document.querySelectorAll('[data-contact-open]').forEach(function(el){
+    el.addEventListener('click', function(){ if (d.showModal) d.showModal(); });
+  });
+  document.querySelectorAll('[data-contact-close]').forEach(function(el){
+    el.addEventListener('click', function(){ d.close(); });
+  });
+})();`;
+
 /** Every inline script on the site. The CSP hashes this list and nothing else. */
-export const INLINE_SCRIPTS: readonly string[] = [THEME_JS, BETA_JS, MENU_JS, ACCOUNT_JS];
+export const INLINE_SCRIPTS: readonly string[] = [THEME_JS, BETA_JS, MENU_JS, ACCOUNT_JS, CONTACT_JS];
 
 type SessionUser = { email: string } | null | undefined;
 
@@ -228,6 +246,7 @@ export const Layout = ({ c, title, description, children, script, bare, noindex 
         <main class="flex-1">{children}</main>
         {!bare && <SiteFooter s={s} />}
         {!bare && <BetaDialog s={s} />}
+        {!bare && <ContactDialog s={s} />}
 
         {/* Strings for whichever bundle this page asked for. A data block, not
             a script — see clientJson() in lib/i18n.ts for why the strict CSP
@@ -243,6 +262,121 @@ export const Layout = ({ c, title, description, children, script, bare, noindex 
     </html>
   );
 };
+
+/* -------------------------------------------------------------------------- */
+/*  Contact                                                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Every way to reach us, in the order we would rather be reached.
+ *
+ * Adding a channel is one entry here plus its name in both string files — the
+ * dialog renders however many there are, so nothing about the layout needs
+ * touching. `handle` is deliberately the thing a person would recognise or
+ * copy (the @name, the address), not a repeat of the platform.
+ */
+const CONTACT_CHANNELS = [
+  {
+    key: "instagram",
+    href: "https://instagram.com/pdf.sy",
+    handle: "@pdf.sy",
+    Icon: Instagram,
+    external: true,
+  },
+  {
+    key: "facebook",
+    href: "https://facebook.com/pdf.sy",
+    handle: "facebook.com/pdf.sy",
+    Icon: Facebook,
+    external: true,
+  },
+  {
+    key: "email",
+    href: "mailto:pdf@pdf.sy",
+    handle: "pdf@pdf.sy",
+    Icon: Mail,
+    external: false,
+  },
+] as const satisfies readonly {
+  key: keyof Strings["contact"];
+  href: string;
+  handle: string;
+  Icon: (p: { class?: string }) => Child;
+  external: boolean;
+}[];
+
+/**
+ * Opened by "Contact us" in the footer. A dialog rather than a page: three
+ * links do not fill a page, and this way nobody loses the document they were
+ * halfway through reading.
+ *
+ * Same trade as the beta notice — the browser's own <dialog> wearing
+ * Basecoat's `.dialog` class, so the backdrop, the fade and Escape-to-close
+ * cost nothing to maintain.
+ */
+const ContactDialog = ({ s }: { s: Strings }) => (
+  <>
+    {/* Sized and centred by hand, because Basecoat pins `.dialog` with
+        `position: fixed; inset: 0; margin: 0`:
+
+        - `w-full` would resolve against the viewport including its scrollbar,
+          which on a 375px phone produced a 384px box hanging off the edge.
+          `calc(100% - 2rem)` measures the pinned box instead, so the gutter
+          survives however the browser counts the scrollbar.
+        - `mx-auto` re-centres it. A fixed box with zero margins sits flush
+          against the start edge — the right edge in Arabic — not centred. */}
+    <dialog
+      class="dialog mx-auto w-[calc(100%-2rem)] max-w-sm"
+      id="contact-dialog"
+      aria-labelledby="contact-title"
+    >
+      <article class="rounded-xl border border-border bg-card p-6 shadow-lg">
+        <header class="flex flex-col gap-1">
+          <h2 id="contact-title" class="text-xl font-semibold tracking-tight">
+            {s.contact.title}
+          </h2>
+          <p class="text-sm text-muted-foreground">{s.contact.intro}</p>
+        </header>
+
+        {/* Negative inline margin so the hover highlight reaches past the text
+            without the text itself sitting off the header's left edge. */}
+        <ul class="-mx-2 mt-5 flex flex-col">
+          {CONTACT_CHANNELS.map(({ key, href, handle, Icon, external }) => (
+            <li key={key}>
+              <a
+                href={href}
+                {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                class="flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-accent"
+              >
+                <Icon class="size-5 shrink-0 text-muted-foreground" />
+                <span class="flex min-w-0 flex-col">
+                  <span class="text-sm font-medium text-foreground">{s.contact[key]}</span>
+                  <span class="truncate text-xs text-muted-foreground" dir="ltr">
+                    {handle}
+                  </span>
+                </span>
+                {external && (
+                  <>
+                    <ArrowUpRight class="size-4 shrink-0 text-muted-foreground/50 ms-auto" />
+                    <span class="sr-only">{s.contact.external}</span>
+                  </>
+                )}
+              </a>
+            </li>
+          ))}
+        </ul>
+
+        <footer class="mt-6 flex justify-end">
+          <button type="button" data-contact-close class="btn" data-variant="outline">
+            {s.contact.close}
+          </button>
+        </footer>
+      </article>
+    </dialog>
+
+    <script dangerouslySetInnerHTML={{ __html: CONTACT_JS }} />
+  </>
+);
 
 /* -------------------------------------------------------------------------- */
 /*  Beta notice                                                                */
@@ -586,6 +720,12 @@ const SiteFooter = ({ s }: { s: Strings }) => (
         <a href="/privacy" class="hover:text-foreground">{s.footer.privacy}</a>
         <a href="/terms" class="hover:text-foreground">{s.footer.terms}</a>
         <a href="/report" class="hover:text-foreground">{s.footer.report}</a>
+        {/* A button, not a link: it opens a dialog rather than going anywhere.
+            Styled to sit in the row with the links, but a screen reader is told
+            the truth about what it does. */}
+        <button type="button" data-contact-open class="cursor-pointer hover:text-foreground">
+          {s.footer.contact}
+        </button>
       </nav>
     </div>
   </footer>
