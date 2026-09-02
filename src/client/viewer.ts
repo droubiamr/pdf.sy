@@ -23,6 +23,7 @@ let renderedAt = 0; // CSS width the current canvases were rasterised for
 /** Dwell time per page, accumulated locally and flushed in batches. */
 const pending = new Map<number, number>();
 const observer = new IntersectionObserver(onIntersect, { threshold: [0.5] });
+const renderObserver = new IntersectionObserver(onRenderIntersect, { rootMargin: "200px", threshold: 0 });
 
 async function boot() {
   if (!slug) return;
@@ -81,14 +82,17 @@ async function render(doc: PdfDoc) {
   const cssWidth = measureWidth();
   renderedAt = cssWidth;
 
-  for (const stale of pagesEl.querySelectorAll("[data-page]")) observer.unobserve(stale);
+  for (const stale of pagesEl.querySelectorAll("[data-page]")) {
+    observer.unobserve(stale);
+    renderObserver.unobserve(stale);
+  }
   pagesEl.replaceChildren();
 
   for (let n = 1; n <= doc.numPages; n++) {
     const page = await doc.getPage(n);
     const unscaled = page.getViewport({ scale: 1 });
     const viewport = page.getViewport({
-      scale: (cssWidth / unscaled.width) * (window.devicePixelRatio || 1),
+      scale: (cssWidth / unscaled.width) * Math.min(window.devicePixelRatio || 1, 2),
     });
 
     const canvas = document.createElement("canvas");
@@ -98,14 +102,41 @@ async function render(doc: PdfDoc) {
     canvas.style.height = "auto";
     canvas.className = "block rounded-lg border border-border bg-white shadow-sm";
 
-    const wrapper = document.createElement("div");
+    const wrapper = document.createElement("div") as HTMLDivElement & { _pdfPage: typeof page; _viewport: typeof viewport };
     wrapper.className = "w-full";
     wrapper.dataset.page = String(n);
+    wrapper._pdfPage = page;
+    wrapper._viewport = viewport;
     wrapper.appendChild(canvas);
     pagesEl.appendChild(wrapper);
 
     observer.observe(wrapper);
-    await page.render({ canvas, canvasContext: canvas.getContext("2d")!, viewport }).promise;
+    renderObserver.observe(wrapper);
+  }
+}
+
+/**
+ * Rasterise a page the first time it comes near the viewport.
+ *
+ * The `getContext` guard is the load-bearing part. iOS Safari has a hard cap on
+ * total canvas memory and returns null rather than throwing once it is hit;
+ * passing that null on is what turned a memory limit into a dead viewer. One
+ * page that cannot get a context is skipped, and the rest still draw.
+ */
+async function onRenderIntersect(entries: IntersectionObserverEntry[]) {
+  for (const entry of entries) {
+    if (!entry.isIntersecting) continue;
+    const wrapper = entry.target as HTMLDivElement & { _pdfPage?: { render: (params: object) => { promise: Promise<void> }; getViewport: (p: object) => object }; _viewport?: object };
+    renderObserver.unobserve(wrapper);
+    const page = wrapper._pdfPage;
+    const viewport = wrapper._viewport;
+    if (!page || !viewport) continue;
+    const canvas = wrapper.querySelector("canvas");
+    if (!canvas) continue;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) continue;
+    await page.render({ canvas, canvasContext: ctx, viewport }).promise
+      .catch(() => { /* one page failing to draw is not worth breaking the rest */ });
   }
 }
 

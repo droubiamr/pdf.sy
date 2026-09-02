@@ -19,7 +19,7 @@ alternative lost is more useful than knowing what won.
 | Auth | Hand-written magic links | Not Better Auth — it expects an ORM adapter this project does not have. |
 | Billing | Stripe over plain REST | Not the Stripe SDK. Four `fetch` calls beat a dependency that assumes Node. |
 | Email | Resend | Falls back to printing to the console when no key is set. |
-| Viewer | pdf.js, vendored | Copied into `/vendor` rather than bundled, so upgrades are a version bump. |
+| Viewer | pdf.js, vendored, pinned to `5.4.624` | Copied into `/vendor` rather than bundled, so upgrades are a version bump — except this one is deliberately *not* bumped. See below. |
 | Browser tools | pdf-lib | Client-side only. The one large bundle, and it loads on `/tools` alone. |
 | Build | A ~110-line node script | Not Vite or webpack. Tailwind CLI plus esbuild, called directly. |
 
@@ -27,6 +27,56 @@ alternative lost is more useful than knowing what won.
 hundred lines and ships as small ES modules. Pages are HTML from the server. If
 your instinct on a new feature is "add a component with state", the instinct to
 follow instead is "render it on the server and add ten lines of vanilla JS".
+
+### Why pdf.js is pinned, not `^`, at 5.4.624
+
+`pdfjs-dist` is pinned exactly in `package.json` — no `^` or `~` — so a fresh
+`npm install` cannot silently pull anything newer. Do not loosen this without
+reading the rest of this note.
+
+Starting at `5.5.207`, pdf.js began using `Map.prototype.getOrInsertComputed`
+internally, and its use keeps growing every release after (6 hits by 5.6.205,
+16 by the 6.2.108 we were on). That method is a very recent TC39 `Map`
+addition that iOS Safari's JavaScriptCore does not implement yet. The specific
+call site that breaks us is `ChunkedStreamManager._requestsByChunk` inside
+`pdf.worker.mjs` — code that only runs when the server advertises
+`Accept-Ranges: bytes` and pdf.js switches to range-based chunked loading. Our
+`/v/:slug/file` route added Range support (for progressive loading on slow
+mobile connections) and that is exactly what activates the crashing path: the
+Worker throws `this._requestsByChunk.getOrInsertComputed is not a function`
+during `PDFWorker.create()`, surfaces as `UnknownErrorException`, and the
+document fails to load — only on iOS Safari, never on desktop, and only once
+Range support exists.
+
+`5.4.624` is the last release with **zero** occurrences of
+`getOrInsertComputed` in either bundle (`pdf.min.mjs` and `pdf.worker.min.mjs`)
+— checked directly, not inferred from the changelog. Versions in between
+(`5.5.x`, `5.6.x`) already use the method elsewhere (annotation keyboard
+handling, telemetry, canvas bitmap caching) even though they don't yet hit our
+specific chunked-loading call site, so they are not a safe target either —
+only `5.4.624` and earlier are clean everywhere.
+
+Checked before pinning backwards: neither of the two GitHub security
+advisories ever filed against pdf.js overlaps this version.
+[GHSA-hq66-cqwq-w95j](https://github.com/mozilla/pdf.js/security/advisories/GHSA-hq66-cqwq-w95j)
+(arbitrary JS execution, `enableScripting` + no CSP) affects `>= 5.6.83`,
+fixed at `6.2.108` — `5.4.624` predates it entirely.
+[GHSA-wgrm-67xf-hhpq](https://github.com/mozilla/pdf.js/security/advisories/GHSA-wgrm-67xf-hhpq)
+affects `<= 4.1.392`, fixed at `4.2.67` — long before `5.4.624`. `5.4.624`
+sits in the clean gap between both. Separately, this app's own CSP
+(`src/lib/security.ts`) already restricts `script-src`, and the viewer only
+ever rasterises to canvas — so the 2026 CVE's exploitation path was closed by
+this app's design regardless of pdf.js version.
+
+To re-check this before ever bumping the version again:
+
+```bash
+grep -c getOrInsertComputed node_modules/pdfjs-dist/build/pdf.min.mjs
+grep -c getOrInsertComputed node_modules/pdfjs-dist/build/pdf.worker.min.mjs
+```
+
+Both must print `0`, or Safari breaks again on any document that triggers
+ranged loading. Bump forward once WebKit ships `Map.prototype.getOrInsertComputed`.
 
 ## Infrastructure
 

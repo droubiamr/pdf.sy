@@ -24,7 +24,7 @@
     "basecoat-css": "^1.0.2",
     "esbuild": "^0.28.2",
     "pdf-lib": "^1.17.1",
-    "pdfjs-dist": "^6.2.108",
+    "pdfjs-dist": "5.4.624",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.2",
     "wrangler": "^4.125.0"
