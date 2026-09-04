@@ -6,6 +6,19 @@ import { t } from "./i18n";
 
 type PdfJs = typeof import("pdfjs-dist");
 type PdfDoc = Awaited<ReturnType<PdfJs["getDocument"]>["promise"]>;
+type PdfPage = Awaited<ReturnType<PdfDoc["getPage"]>>;
+type PdfViewport = ReturnType<PdfPage["getViewport"]>;
+type RenderTask = ReturnType<PdfPage["render"]>;
+
+/**
+ * A page's slot in the document. Carries everything needed to draw it, so a
+ * canvas can be thrown away and rebuilt later from the wrapper alone.
+ */
+type PageSlot = HTMLDivElement & {
+  _pdfPage?: PdfPage;
+  _viewport?: PdfViewport;
+  _task?: RenderTask | null;
+};
 
 const root = document.querySelector<HTMLElement>("[data-slug]");
 const slug = root?.dataset.slug;
@@ -24,6 +37,20 @@ let renderedAt = 0; // CSS width the current canvases were rasterised for
 const pending = new Map<number, number>();
 const observer = new IntersectionObserver(onIntersect, { threshold: [0.5] });
 const renderObserver = new IntersectionObserver(onRenderIntersect, { rootMargin: "200px", threshold: 0 });
+
+/**
+ * How many pages either side of the newest one keep their pixels.
+ *
+ * Drawing lazily bounds how fast canvas memory is claimed, not how much: a
+ * canvas keeps its backing store forever once drawn, so reading to the end of
+ * a long document still ends up holding every page at once. Two either side
+ * (five live) covers the pages a reader can actually see mid-scroll while
+ * making the ceiling a function of this number rather than of page count.
+ */
+const WINDOW_RADIUS = 2;
+
+/** Pages currently holding pixels. Everything else is a zero-sized canvas. */
+const live = new Set<PageSlot>();
 
 async function boot() {
   if (!slug) return;
@@ -83,9 +110,11 @@ async function render(doc: PdfDoc) {
   renderedAt = cssWidth;
 
   for (const stale of pagesEl.querySelectorAll("[data-page]")) {
+    (stale as PageSlot)._task?.cancel();
     observer.unobserve(stale);
     renderObserver.unobserve(stale);
   }
+  live.clear();
   pagesEl.replaceChildren();
 
   for (let n = 1; n <= doc.numPages; n++) {
@@ -96,13 +125,19 @@ async function render(doc: PdfDoc) {
     });
 
     const canvas = document.createElement("canvas");
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
+    // Explicitly zero, not merely unset: a canvas with no dimensions still
+    // defaults to 300x150 and holds that buffer, which is 180 KB per undrawn
+    // page. `aspect-ratio` is what keeps the slot the right shape anyway, so
+    // scroll height is correct from the start and does not move when a canvas
+    // is released and later redrawn.
+    canvas.width = 0;
+    canvas.height = 0;
+    canvas.style.aspectRatio = `${viewport.width} / ${viewport.height}`;
     canvas.style.width = "100%";
     canvas.style.height = "auto";
     canvas.className = "block rounded-lg border border-border bg-white shadow-sm";
 
-    const wrapper = document.createElement("div") as HTMLDivElement & { _pdfPage: typeof page; _viewport: typeof viewport };
+    const wrapper = document.createElement("div") as PageSlot;
     wrapper.className = "w-full";
     wrapper.dataset.page = String(n);
     wrapper._pdfPage = page;
@@ -112,6 +147,35 @@ async function render(doc: PdfDoc) {
 
     observer.observe(wrapper);
     renderObserver.observe(wrapper);
+  }
+}
+
+/**
+ * Hand a page's pixels back to the browser.
+ *
+ * Setting either dimension to zero is what actually frees the backing store —
+ * removing the element would too, but the slot has to stay in the document or
+ * the scroll position jumps. The page goes back under the render observer so
+ * scrolling to it again redraws it.
+ */
+function releasePage(slot: PageSlot) {
+  slot._task?.cancel();
+  slot._task = null;
+
+  const canvas = slot.querySelector("canvas");
+  if (canvas) {
+    canvas.width = 0;
+    canvas.height = 0;
+  }
+
+  live.delete(slot);
+  renderObserver.observe(slot);
+}
+
+/** Drop every live page further than WINDOW_RADIUS from the one just drawn. */
+function trimTo(center: number) {
+  for (const slot of [...live]) {
+    if (Math.abs(Number(slot.dataset.page) - center) > WINDOW_RADIUS) releasePage(slot);
   }
 }
 
@@ -126,17 +190,39 @@ async function render(doc: PdfDoc) {
 async function onRenderIntersect(entries: IntersectionObserverEntry[]) {
   for (const entry of entries) {
     if (!entry.isIntersecting) continue;
-    const wrapper = entry.target as HTMLDivElement & { _pdfPage?: { render: (params: object) => { promise: Promise<void> }; getViewport: (p: object) => object }; _viewport?: object };
-    renderObserver.unobserve(wrapper);
-    const page = wrapper._pdfPage;
-    const viewport = wrapper._viewport;
+
+    const slot = entry.target as PageSlot;
+    // Stop watching while it is drawn; releasePage() puts it back if the page
+    // later falls out of the window.
+    renderObserver.unobserve(slot);
+
+    const page = slot._pdfPage;
+    const viewport = slot._viewport;
     if (!page || !viewport) continue;
-    const canvas = wrapper.querySelector("canvas");
+    const canvas = slot.querySelector("canvas");
     if (!canvas) continue;
+
+    // Claims the backing store — for a first draw and for a page coming back
+    // after release alike, since both start from a zero-sized canvas.
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+
     const ctx = canvas.getContext("2d");
     if (!ctx) continue;
-    await page.render({ canvas, canvasContext: ctx, viewport }).promise
-      .catch(() => { /* one page failing to draw is not worth breaking the rest */ });
+
+    live.add(slot);
+    const task = page.render({ canvas, canvasContext: ctx, viewport });
+    slot._task = task;
+
+    await task.promise.catch(() => {
+      /* A cancelled render is the normal way a page leaves the window, and one
+         page failing to draw is not worth breaking the rest. */
+    });
+
+    if (slot._task === task) {
+      slot._task = null;
+      trimTo(Number(slot.dataset.page));
+    }
   }
 }
 
