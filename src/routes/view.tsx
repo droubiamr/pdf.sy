@@ -98,9 +98,54 @@ view.post("/:slug/unlock", async (c) => {
 
 /* --------------------------------- bytes --------------------------------- */
 
+type ByteRange = { start: number; end: number };
+
+/**
+ * A single `Range: bytes=...` request against a known object size.
+ *
+ * `null` means "serve the full body" — no header, a unit other than bytes, or
+ * multiple ranges (`bytes=0-10,20-30`) all fall back to a plain 200 rather
+ * than the multipart response real multi-range support would require.
+ *
+ * `"invalid"` means the header did ask for one specific range and that range
+ * cannot be satisfied — the caller must answer 416, not silently serve
+ * something else.
+ */
+function parseRange(header: string | undefined, size: number): ByteRange | "invalid" | null {
+  if (!header?.startsWith("bytes=")) return null;
+  const spec = header.slice("bytes=".length).trim();
+  if (spec.includes(",")) return null;
+
+  const match = /^(\d*)-(\d*)$/.exec(spec);
+  if (!match || (match[1] === "" && match[2] === "")) return "invalid";
+
+  let start: number;
+  let end: number;
+  if (match[1] === "") {
+    // Suffix form, "bytes=-500": the last 500 bytes of the object.
+    const suffixLength = Number(match[2]);
+    if (!Number.isFinite(suffixLength) || suffixLength <= 0) return "invalid";
+    start = Math.max(size - suffixLength, 0);
+    end = size - 1;
+  } else {
+    start = Number(match[1]);
+    end = match[2] === "" ? size - 1 : Number(match[2]);
+  }
+
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start || start >= size) {
+    return "invalid";
+  }
+  return { start, end: Math.min(end, size - 1) };
+}
+
 /**
  * Never hand out a raw R2 URL: routing every read through here is what makes
  * revocation, expiry, download-blocking and passwords possible at all.
+ *
+ * Also the only place pdf.js can fetch bytes from, which is why it has to
+ * speak Range: without it, the viewer cannot render a page until the whole
+ * file has downloaded, and a 22-page PDF over a slow mobile connection is a
+ * long time staring at a spinner.
  */
 view.get("/v/:slug/file", async (c) => {
   const s = t(c);
@@ -109,32 +154,67 @@ view.get("/v/:slug/file", async (c) => {
   if (!link) return c.text(s.viewer.gone, 404);
 
   // The gate has to be here too, not only on the viewer page — otherwise the
-  // password protects the wrapper and the document leaks.
+  // password protects the wrapper and the document leaks. It runs before any
+  // Range header is even looked at, so a ranged request gets no more access
+  // than a plain one.
   if (!(await isUnlocked(c, link))) return c.text(s.viewer.locked, 403);
 
   const version = await resolveVersion(c.env.DB, link);
   if (!version) return c.text(s.viewer.notFound, 404);
 
-  const object = await c.env.FILES.get(version.r2_key);
-  if (!object) return c.text(s.viewer.notFound, 404);
+  // D1's size is the object's size, so the range maths needs no second R2 call.
+  //
+  // Both writers set it from `file.size` and hand those very bytes to R2, and
+  // `File.arrayBuffer().byteLength === File.size` holds by spec. No object is
+  // ever rewritten either: an upload keys on a freshly minted document id, a
+  // replace on the new version row's id, so neither can land on a key another
+  // write already owns, and a write whose row does not commit takes its own
+  // bytes back. A HEAD here would re-read a number we already hold, on every
+  // request, for every ranged chunk.
+  const size = version.size_bytes;
 
   const download = c.req.query("download") === "1";
   if (download && link.allow_download !== 1) {
     return c.text(s.viewer.downloadsOff, 403);
   }
 
-  return new Response(object.body, {
-    headers: {
-      "content-type": "application/pdf",
-      "content-length": String(version.size_bytes),
-      "content-disposition": `${download ? "attachment" : "inline"}; filename="${encodeURIComponent(link.name ?? "document")}.pdf"`,
-      "cache-control": "private, no-store",
-      "x-content-type-options": "nosniff",
-      // A meta tag cannot reach a PDF, and crawlers index PDF bodies happily.
-      // The header is the only way to keep someone's document out of search.
-      "x-robots-tag": "noindex, nofollow, noarchive",
-    },
-  });
+  const headers: Record<string, string> = {
+    "content-type": "application/pdf",
+    "content-disposition": `${download ? "attachment" : "inline"}; filename="${encodeURIComponent(link.name ?? "document")}.pdf"`,
+    "cache-control": "private, no-store",
+    "x-content-type-options": "nosniff",
+    // A meta tag cannot reach a PDF, and crawlers index PDF bodies happily.
+    // The header is the only way to keep someone's document out of search.
+    "x-robots-tag": "noindex, nofollow, noarchive",
+    "accept-ranges": "bytes",
+  };
+
+  const range = parseRange(c.req.header("range"), size);
+
+  if (range === "invalid") {
+    return new Response(null, { status: 416, headers: { ...headers, "content-range": `bytes */${size}` } });
+  }
+
+  if (range) {
+    const object = await c.env.FILES.get(version.r2_key, {
+      range: { offset: range.start, length: range.end - range.start + 1 },
+    });
+    if (!object) return c.text(s.viewer.notFound, 404);
+
+    return new Response(object.body, {
+      status: 206,
+      headers: {
+        ...headers,
+        "content-length": String(range.end - range.start + 1),
+        "content-range": `bytes ${range.start}-${range.end}/${object.size}`,
+      },
+    });
+  }
+
+  const object = await c.env.FILES.get(version.r2_key);
+  if (!object) return c.text(s.viewer.notFound, 404);
+
+  return new Response(object.body, { status: 200, headers: { ...headers, "content-length": String(size) } });
 });
 
 /* -------------------------------- viewer --------------------------------- */
