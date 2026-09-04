@@ -168,23 +168,47 @@ links.post("/l/:slug/version", async (c) => {
   const document = await c.env.DB.prepare(`SELECT current_version FROM documents WHERE id = ?`)
     .bind(link.document_id).first<Pick<Document, "current_version">>();
   const version = (document?.current_version ?? 1) + 1;
-  const r2Key = `docs/${link.document_id}/v${version}.pdf`;
+
+  // The version id, not the version number, is what makes this key unique.
+  //
+  // `version` is read then incremented without reserving anything, so two
+  // replaces racing each other both arrive here holding the same number. Name
+  // the object after that number and they write to the same key: the second
+  // put silently overwrites the first, one INSERT then loses on
+  // UNIQUE (document_id, version), and what survives is a row describing one
+  // file and bytes belonging to another. Keyed by id instead, each attempt
+  // owns its own object and the loser's is deleted below.
+  const versionId = newId();
+  const r2Key = `docs/${link.document_id}/v${version}-${versionId}.pdf`;
 
   await c.env.FILES.put(r2Key, bytes, {
     httpMetadata: { contentType: "application/pdf" },
     customMetadata: { docId: link.document_id, version: String(version) },
   });
 
-  await c.env.DB.batch([
-    c.env.DB.prepare(
-      `INSERT INTO document_versions (id, document_id, version, r2_key, sha256, size_bytes, page_count, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, ?)`,
-    ).bind(newId(), link.document_id, version, r2Key, sha256, file.size, Date.now()),
-    c.env.DB.prepare(`UPDATE documents SET current_version = ? WHERE id = ?`)
-      .bind(version, link.document_id),
-    // Links that follow "latest" pick this up for free; pinned ones stay put.
-    c.env.DB.prepare(`UPDATE links SET pinned_version = NULL WHERE slug = ?`).bind(slug),
-  ]);
+  try {
+    await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO document_versions (id, document_id, version, r2_key, sha256, size_bytes, page_count, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, NULL, ?)`,
+      ).bind(versionId, link.document_id, version, r2Key, sha256, file.size, Date.now()),
+      c.env.DB.prepare(`UPDATE documents SET current_version = ? WHERE id = ?`)
+        .bind(version, link.document_id),
+      // Links that follow "latest" pick this up for free; pinned ones stay put.
+      c.env.DB.prepare(`UPDATE links SET pinned_version = NULL WHERE slug = ?`).bind(slug),
+    ]);
+  } catch (error) {
+    // Bytes first, rows second, and take the bytes back when the rows do not
+    // land — the same trade api.ts makes on upload. The batch is atomic, so a
+    // replace that loses the race changes nothing: the previous version keeps
+    // serving and only this object is left over. Ordering it the other way
+    // would instead leave a row naming bytes that never arrived, which bumps
+    // current_version and clears pinned_version, and so breaks every link that
+    // follows "latest" on a document that was working a moment ago.
+    console.error("replace metadata write failed, removing orphaned object", error);
+    c.executionCtx.waitUntil(c.env.FILES.delete(r2Key).catch(() => {}));
+    return c.redirect(`${back}${back.includes("?") ? "&" : "?"}error=save_failed`, 303);
+  }
 
   return c.redirect(`${back}${back.includes("?") ? "&" : "?"}updated=${version}`, 303);
 });

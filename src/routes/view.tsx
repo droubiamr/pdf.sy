@@ -162,12 +162,16 @@ view.get("/v/:slug/file", async (c) => {
   const version = await resolveVersion(c.env.DB, link);
   if (!version) return c.text(s.viewer.notFound, 404);
 
-  // A HEAD-only read: gets the real object size without pulling any bytes,
-  // so range math is against what R2 actually holds rather than the
-  // (usually identical, but not authoritative) size column in D1.
-  const head = await c.env.FILES.head(version.r2_key);
-  if (!head) return c.text(s.viewer.notFound, 404);
-  const size = head.size;
+  // D1's size is the object's size, so the range maths needs no second R2 call.
+  //
+  // Both writers set it from `file.size` and hand those very bytes to R2, and
+  // `File.arrayBuffer().byteLength === File.size` holds by spec. No object is
+  // ever rewritten either: an upload keys on a freshly minted document id, a
+  // replace on the new version row's id, so neither can land on a key another
+  // write already owns, and a write whose row does not commit takes its own
+  // bytes back. A HEAD here would re-read a number we already hold, on every
+  // request, for every ranged chunk.
+  const size = version.size_bytes;
 
   const download = c.req.query("download") === "1";
   if (download && link.allow_download !== 1) {

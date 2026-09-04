@@ -130,6 +130,7 @@ export function uploadErrorMessage(s: Strings, code: string): string {
     encrypted: s.errors.encrypted,
     blocked: s.errors.blocked,
     rate_limited: s.errors.rateLimited,
+    save_failed: s.errors.saveFailed,
   };
   return messages[code] ?? s.errors.generic;
 }
